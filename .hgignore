@@ -1,0 +1,10 @@
+(^|/)\.hg($|/)
+.*\.pyc$
+.*\~$
+.*,cover$
+.*\.o$
+.*\.so$
+^tmp/
+rpath_common/xmllib/xmllib_constants.pyc?$
+^pylint/reports/
+^rpath-common-.*.tar.bz2
