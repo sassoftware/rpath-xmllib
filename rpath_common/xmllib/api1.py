@@ -52,6 +52,8 @@ class BaseNode(object):
 
     def __init__(self):
         self._text = ''
+        self.namespaces = {}
+        self.inheritedNamespaces = {}
 
     def _addChild(self, name, childNode):
         # ensure we don't modify the class attribute
@@ -154,7 +156,25 @@ class BindingHandler(sax.ContentHandler):
         classType = BaseNode
         if name in self.typeDict:
             classType = self.typeDict[name]
-        self.stack.append(type(str(name), (classType,), dict(attrs))())
+        # Extract namespace aliases
+        namespaces = {}
+        nonNsAttrs = {}
+        for k, v in attrs.items():
+            arr = k.split(':', 1)
+            if arr[0] != 'xmlns':
+                nonNsAttrs[k] = v
+                continue
+            if len(arr) == 1:
+                nsName = None
+            else:
+                nsName = arr[1]
+            namespaces[nsName] = v
+        inheritedNamespaces = (self.stack and self.stack[-1].namespaces.copy()
+                               or {})
+        newNode = type(str(name), (classType,), nonNsAttrs)()
+        newNode.namespaces = namespaces
+        newNode.inheritedNamespaces = inheritedNamespaces
+        self.stack.append(newNode)
 
     def endElement(self, name):
         elem = self.stack.pop()
