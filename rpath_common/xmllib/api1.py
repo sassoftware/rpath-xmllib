@@ -17,8 +17,6 @@ import os
 import subprocess
 from xml import sax
 
-simpletypes = (int, long, float, bool, str, unicode, list, set, dict, tuple)
-
 from lxml import etree
 
 def prettyPrint(func):
@@ -34,7 +32,165 @@ def prettyPrint(func):
             xml_declaration = True, encoding = 'UTF-8')
     return wrapper
 
-class BaseNode(object):
+class _AbstractNode(object):
+    __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
+                 '_otherAttributes', ]
+    def __init__(self, attributes = None, nsMap = None, name = None):
+        self._children = []
+        self._nsMap = nsMap or {}
+        self._setAttributes(attributes)
+        if name is not None:
+            self.setName(name)
+
+    def setName(self, name):
+        nsName, tagName = splitNamespace(name)
+        if nsName is not None and nsName not in self._nsMap:
+            raise Exception("Reference to undefined namespace %s" % nsName)
+        self._name = (nsName, tagName)
+
+    def getName(self):
+        return unsplitNamespace(self._name[1], self._name[0])
+
+    def addChild(self, childNode):
+        # If the previous node in the list is character data, drop it, since
+        # we don't support mixed content
+        if self._children and isinstance(self._children[-1], unicode):
+            self._children[-1] = childNode.finalize()
+        else:
+            if childNode.getName() in getattr(self, '_singleChildren', []):
+                setattr(self, childNode.getName(), childNode.finalize())
+            else:
+                self._children.append(childNode.finalize())
+
+    def iterChildren(self):
+        if hasattr(self, '_childOrder'):
+            return orderItems(self._children, self._childOrder)
+        return iter(self._children)
+
+    def finalize(self):
+        return self
+
+    def characters(self, ch):
+        if self._children:
+            if isinstance(self._children[-1], unicode):
+                self._children[-1] += ch
+            # We don't support mixed contents, so don't bother adding
+            # characters after children
+        else:
+            self._children.append(ch)
+
+    def getNamespaceMap(self):
+        return self._nsMap.copy()
+
+    def iterAttributes(self):
+        for nsName, nsVal in sorted(self._nsAttributes.items()):
+            if nsName is None:
+                yield ('xmlns', nsVal)
+            else:
+                yield ('xmlns:%s' % nsName, nsVal)
+        for (nsName, attrName), attrVal in self._otherAttributes.items():
+            if nsName is None:
+                yield (attrName, attrVal)
+            else:
+                yield ("%s:%s" % (nsName, attrName), attrVal)
+
+    def getAttribute(self, name, namespace = None):
+        return self._otherAttributes.get((namespace, name))
+
+    def getChildren(self, name, namespace = None):
+        tagName = unsplitNamespace(name, namespace)
+        return [ x for x in self.iterChildren()
+            if hasattr(x, 'getName') and x.getName() == tagName ]
+
+    def getText(self):
+        text = [ x for x in self._children if isinstance(x, (str, unicode)) ]
+        if not text:
+            return ''
+        return text[0]
+
+    def getElementTree(self, parent = None):
+        if self._name[0] is None:
+            name = self._name[1]
+        else:
+            name = "{%s}%s" % (self._nsMap[self._name[0]], self._name[1])
+
+        attrs = {}
+        for (nsName, attrName), attrVal in self._otherAttributes.items():
+            attrName = self._buildElementTreeName(attrName, nsName)
+            attrs[attrName] = attrVal
+
+        if parent is None:
+            elem = etree.Element(name, attrs, self._nsAttributes)
+        else:
+            elem = etree.SubElement(parent, name, attrs, self._nsAttributes)
+        for child in self.iterChildren():
+            if hasattr(child, 'getElementTree'):
+                child.getElementTree(parent = elem)
+            elif isinstance(child, unicode):
+                elem.text = child
+            elif isinstance(child, tuple):
+                self._getElementTreeFromTuple(child, elem)
+            else:
+                # XXX
+                pass
+        return elem
+
+    def _getElementTreeFromTuple(self, child, parent = None):
+        nsName, tagName = splitNamespace(child[0])
+        elemName = self._buildElementTreeName(tagName, nsName)
+        if parent is None:
+            nelem = etree.Element(elemName)
+        else:
+            nelem = etree.SubElement(parent, elemName)
+        val = None
+        if isinstance(child[1], bool):
+            val = child[1] and 'true' or 'false'
+        elif isinstance(child[1], (str, unicode)):
+            val = child[1]
+        else:
+            val = str(child[1])
+        nelem.text = val
+
+    def _setAttributes(self, attributes):
+        self._nsAttributes = {}
+        self._otherAttributes = {}
+        if attributes is None:
+            return
+        nonNsAttr = []
+        for attrName, attrVal in attributes.items():
+            arr = attrName.split(':', 1)
+            if arr[0] != 'xmlns':
+                # Copy the tag aside, we may need to qualify it later
+                if len(arr) == 1:
+                    # No name space specified, use default
+                    attrKey = (None, attrName)
+                else:
+                    attrKey = tuple(arr)
+                nonNsAttr.append((attrKey, attrVal))
+                continue
+            if len(arr) == 1:
+                nsName = None
+            else:
+                nsName = arr[1]
+            self._nsMap[nsName] = attrVal
+            self._nsAttributes[nsName] = attrVal
+        # Now walk all attributes and qualify them with the namespace if
+        # necessary
+        for (nsName, attrName), attrVal in nonNsAttr:
+            if nsName is not None and nsName not in self._nsMap:
+                raise Exception("Reference to undefined namespace %s" % nsName)
+            self._otherAttributes[(nsName, attrName)] = attrVal
+
+    def _buildElementTreeName(self, name, namespace = None):
+        if namespace is None:
+            return name
+        return "{%s}%s" % (self._nsMap[namespace], name)
+
+
+class BaseNode(_AbstractNode):
+    pass
+
+class GenericNode(BaseNode):
     """
     Base node for all data classes used by SAX handler. Neither this class,
     nor any descendent needs to be instantiated. They should be registered
@@ -47,65 +203,46 @@ class BaseNode(object):
     By default, _addChild will add the childNode to a list. specifying an
     attribute in _singleChildren will cause the value to be stored directly.
     """
-    _singleChildren = []
-    _childOrder = []
 
-    def __init__(self):
-        self._text = ''
-        self.namespaces = {}
-        self.inheritedNamespaces = {}
-
-    def _addChild(self, name, childNode):
-        # ensure we don't modify the class attribute
-        if id(self._childOrder) == id(self.__class__._childOrder):
-            self._childOrder = []
-        self._childOrder.append(name)
-        if name in self._singleChildren:
-            self.__dict__[name] = childNode._finalize()
-        else:
-            if name not in self.__dict__:
-                self.__dict__[name] = []
-            self.__dict__[name].append(childNode._finalize())
-
-    def _finalize(self):
-        return self
-
-    def _characters(self, ch):
-        self._text += ch
+    def __init__(self, attributes = None, nsMap = None):
+        BaseNode.__init__(self, attributes = attributes, nsMap = nsMap)
 
 class IntegerNode(BaseNode):
     """
     Integer data class for SAX parser.
 
     Registering a tag with this class will render the text contents into
-    an integer when _finalize is called. All attributes and tags will be lost.
+    an integer when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to 0.
     """
-    def _finalize(self):
-        return self._text and int(self._text) or 0
+    def finalize(self):
+        text = self.getText()
+        try:
+            return int(text)
+        except ValueError:
+            return 0
 
 class StringNode(BaseNode):
     """
     String data class for SAX parser.
 
     Registering a tag with this class will render the text contents into
-    a string when _finalize is called. All attributes and tags will be lost.
+    a string when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to ''.
     """
-    def _finalize(self):
-        if isinstance(self._text, unicode):
-            return self._text
-        return str(self._text)
+    def finalize(self):
+        text = self.getText()
+        return text
 
 class NullNode(BaseNode):
     """
     Null data class for SAX parser.
 
     Registering a tag with this class will render the text contents into
-    None when _finalize is called. All attributes and tags will be lost.
+    None when finalize is called. All attributes and tags will be lost.
     All text will be lost.
     """
-    def _finalize(self):
+    def finalize(self):
         pass
 
 class BooleanNode(BaseNode):
@@ -113,21 +250,22 @@ class BooleanNode(BaseNode):
     Boolean data class for SAX parser.
 
     Registering a tag with this class will render the text contents into
-    a bool when _finalize is called. All attributes and tags will be lost.
+    a bool when finalize is called. All attributes and tags will be lost.
     '1' or 'true' (case insensitive) will result in True.
     """
-    def _finalize(self):
-        return self._text.upper().strip() in ('TRUE', '1')
+    def finalize(self):
+        text = self.getText()
+        return text.strip().upper() in ('TRUE', '1')
 
 class DictNode(BaseNode):
     """
     Dict container class for SAX parser.
 
     Registering a tag with this class will return the __dict__  of this class
-    when _finalize is called. This effectively means all tags will be
+    when finalize is called. This effectively means all tags will be
     preserved, but all attributes will be lost.
     """
-    def _finalize(self):
+    def finalize(self):
         return dict(x for x in self.__dict__.iteritems() \
                 if not x[0].startswith('_'))
 
@@ -149,43 +287,39 @@ class BindingHandler(sax.ContentHandler):
         self.rootNode = None
         sax.ContentHandler.__init__(self)
 
-    def registerType(self, key, typeClass):
-        self.typeDict[key] = typeClass
+    def registerType(self, typeClass, name = None, namespace = None):
+        if name is None:
+            name = typeClass.name
+        if namespace is None:
+            namespace = getattr(typeClass, 'namespace', None)
+
+        self.typeDict[(namespace, name)] = typeClass
 
     def startElement(self, name, attrs):
-        classType = BaseNode
-        if name in self.typeDict:
-            classType = self.typeDict[name]
-        # Extract namespace aliases
-        namespaces = {}
-        nonNsAttrs = {}
-        for k, v in attrs.items():
-            arr = k.split(':', 1)
-            if arr[0] != 'xmlns':
-                nonNsAttrs[k] = v
-                continue
-            if len(arr) == 1:
-                nsName = None
-            else:
-                nsName = arr[1]
-            namespaces[nsName] = v
-        inheritedNamespaces = (self.stack and self.stack[-1].namespaces.copy()
-                               or {})
-        newNode = type(str(name), (classType,), nonNsAttrs)()
-        newNode.namespaces = namespaces
-        newNode.inheritedNamespaces = inheritedNamespaces
+        classType = GenericNode
+        nameSpace, tagName = splitNamespace(name)
+        if (nameSpace, tagName) in self.typeDict:
+            classType = self.typeDict[(nameSpace, tagName)]
+
+        if self.stack:
+            nsMap = self.stack[-1].getNamespaceMap()
+        else:
+            nsMap = {}
+        newNode = classType(attrs, nsMap = nsMap)
+        newNode.setName(name)
         self.stack.append(newNode)
 
     def endElement(self, name):
         elem = self.stack.pop()
         if not self.stack:
-            self.rootNode = elem
+            self.rootNode = elem.finalize()
         else:
-            self.stack[-1]._addChild(name, elem)
+            self.stack[-1].addChild(elem)
 
     def characters(self, ch):
         elem = self.stack[-1]
-        elem._characters(ch)
+        elem.characters(ch)
+
 
 class DataBinder(object):
     """
@@ -227,32 +361,24 @@ class DataBinder(object):
     def __init__(self, typeDict = None):
         self.contentHandler = BindingHandler(typeDict)
 
-    def registerType(self, key, val):
-        return self.contentHandler.registerType(key, val)
-
-    def parseFile(self, fn):
-        f = open(fn)
-        data = f.read()
-        f.close()
-        return self.parseString(data)
+    def registerType(self, klass, name = None, namespace = None):
+        return self.contentHandler.registerType(klass, name = name,
+                                                namespace = namespace)
 
     def parseString(self, data):
+        stream = StringIO.StringIO(data)
+        return self.parseFile(stream)
+
+    def parseFile(self, stream):
+        if isinstance(stream, str):
+            stream = file(stream)
         self.contentHandler.rootNode = None
         parser = sax.make_parser()
         parser.setContentHandler(self.contentHandler)
-        parser.parse(StringIO.StringIO(data))
+        parser.parse(stream)
         rootNode = self.contentHandler.rootNode
         self.contentHandler.rootNode = None
         return rootNode
-
-    def _getChildOrder(self, items, order):
-        # sort key is a three part tuple. each element maps to these rules:
-        # element one reflects if we know how to order the element.
-        # element two reflects the element's position in the ordering.
-        # element three sorts everything else by simply providing the original
-        # item (aka. default ordering of sort)
-        return sorted(items, key = lambda x: \
-                (x not in order, x in order and order.index(x), x))
 
     @staticmethod
     def _etree_add(elem, obj):
@@ -277,20 +403,7 @@ class DataBinder(object):
             for childName, child in sorted(obj.iteritems()):
                 self._etree_add(elem, self._to_etree_r(child, suggestedName = childName))
         else:
-            attrs = (x for x in obj.__class__.__dict__.iteritems() \
-                    if not x[0].startswith('_'))
-            attrs = dict((x, self._toString(y)) for x, y in attrs)
-            children = dict(x for x in obj.__dict__.iteritems() \
-                    if not x[0].startswith('_'))
-            elem.attrib.update(attrs)
-            ordering = hasattr(obj, '_childOrder') and obj._childOrder or []
-            childOrder = self._getChildOrder(children.keys(), ordering)
-            for key in childOrder:
-                val = children[key]
-                self._etree_add(elem, self._to_etree_r(val, key))
-            if hasattr(obj, '_text'):
-                if obj._text.strip():
-                    elem.text = obj._text
+            elem = obj.getElementTree()
         return elem
 
     @staticmethod
@@ -317,4 +430,31 @@ class DataBinder(object):
                 xml_declaration = False, encoding = encoding)
         return res
 
+def splitNamespace(tag):
+    """Splits the namespace out of the tag.
+    @param tag: tag
+    @type tag: C{str}
+    @return: A tuple with the namespace (set to None if not present) and
+    the tag name.
+    @rtype: C{tuple} (namespace, tagName)
+    """
+    arr = tag.split(':', 1)
+    if len(arr) == 1:
+        return None, tag
+    return arr[0], arr[1]
 
+def unsplitNamespace(name, namespace = None):
+    if namespace is None:
+        return name
+    return "%s:%s" % (namespace, name)
+
+def orderItems(items, order):
+    # sort key is a three part tuple. each element maps to these rules:
+    # element one reflects if we know how to order the element.
+    # element two reflects the element's position in the ordering.
+    # element three sorts everything else by simply providing the original
+    # item (aka. default ordering of sort)
+    return sorted(items,
+        key = lambda x: (x.getName() not in order,
+                         x.getName() in order and order.index(x.getName()),
+                         x.getName()))
