@@ -27,6 +27,40 @@ class UndefinedNamespaceError(XmlLibError):
     "Raised when a reference to an undefined namespace is found"
 #}
 
+class SerializableObject(object):
+    def getElementTree(self, parent = None):
+        name = self._getName()
+
+        attrs = {}
+        for attrName, attrVal in self._iterAttributes():
+            if isinstance(attrVal, bool):
+                attrVal = attrVal and "true" or "false"
+            elif not isinstance(attrVal, (str, unicode)):
+                attrVal = str(attrVal)
+            attrs[attrName] = attrVal
+
+        localNamespaces = self._getLocalNamespaces()
+
+        elem = createElementTree(name, attrs, localNamespaces, parent = parent)
+        for child in self._iterChildren():
+            if hasattr(child, 'getElementTree'):
+                child.getElementTree(parent = elem)
+            elif isinstance(child, (str, unicode)):
+                elem.text = child
+        return elem
+
+    def _getName(self):
+        raise NotImplementedError()
+
+    def _getLocalNamespaces(self):
+        raise NotImplementedError()
+
+    def _iterAttributes(self):
+        raise NotImplementedError()
+
+    def _iterChildren(self):
+        raise NotImplementedError()
+
 class _AbstractNode(object):
     __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
                  '_otherAttributes', ]
@@ -120,14 +154,12 @@ class _AbstractNode(object):
             attrName = self._buildElementTreeName(attrName, nsName)
             attrs[attrName] = attrVal
 
-        if parent is None:
-            elem = etree.Element(name, attrs, self._nsAttributes)
-        else:
-            elem = etree.SubElement(parent, name, attrs, self._nsAttributes)
+        elem = createElementTree(name, attrs, self._nsAttributes,
+                                 parent = parent)
         for child in self.iterChildren():
             if hasattr(child, 'getElementTree'):
                 child.getElementTree(parent = elem)
-            elif isinstance(child, unicode):
+            elif isinstance(child, (str, unicode)):
                 elem.text = child
             elif isinstance(child, tuple):
                 self._getElementTreeFromTuple(child, elem)
@@ -139,10 +171,7 @@ class _AbstractNode(object):
     def _getElementTreeFromTuple(self, child, parent = None):
         nsName, tagName = splitNamespace(child[0])
         elemName = self._buildElementTreeName(tagName, nsName)
-        if parent is None:
-            nelem = etree.Element(elemName)
-        else:
-            nelem = etree.SubElement(parent, elemName)
+        nelem = createElementTree(elemName, {}, parent = parent)
         val = None
         if isinstance(child[1], bool):
             val = child[1] and 'true' or 'false'
@@ -222,6 +251,9 @@ class IntegerNode(BaseNode):
             return int(text)
         except ValueError:
             return 0
+
+class TextNode(BaseNode):
+    pass
 
 class StringNode(BaseNode):
     """
@@ -459,3 +491,12 @@ def orderItems(items, order):
         key = lambda x: (x.getName() not in order,
                          x.getName() in order and order.index(x.getName()),
                          x.getName()))
+
+def createElementTree(name, attrs, nsMap = None, parent = None):
+    if nsMap is None:
+        nsMap = {}
+    if parent is not None:
+        elem = etree.SubElement(parent, name, attrs, nsMap)
+    else:
+        elem = etree.Element(name, attrs, nsMap)
+    return elem
