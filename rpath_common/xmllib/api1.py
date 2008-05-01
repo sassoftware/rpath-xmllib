@@ -19,18 +19,13 @@ from xml import sax
 
 from lxml import etree
 
-def prettyPrint(func):
-    def wrapper(*args, **kwargs):
-        res = func(*args, **kwargs)
-        # XXX: It is fairly inefficient to serialize an
-        # ElementTree-like object to XML, then parse it back into an
-        # lxml.etree.ElementTree object, then serialize it again just to
-        # pretty-print it. Maybe we whould just have _toXml write an
-        # ElementTree object to begin with?
-        tree = etree.parse(StringIO.StringIO(res))
-        res = etree.tostring(tree, pretty_print = True,
-            xml_declaration = True, encoding = 'UTF-8')
-    return wrapper
+#{ Exception classes
+class XmlLibError(Exception):
+    "Top-level exception class"
+
+class UndefinedNamespaceError(XmlLibError):
+    "Raised when a reference to an undefined namespace is found"
+#}
 
 class _AbstractNode(object):
     __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
@@ -45,11 +40,17 @@ class _AbstractNode(object):
     def setName(self, name):
         nsName, tagName = splitNamespace(name)
         if nsName is not None and nsName not in self._nsMap:
-            raise Exception("Reference to undefined namespace %s" % nsName)
+            raise UndefinedNamespaceError(nsName)
         self._name = (nsName, tagName)
 
     def getName(self):
         return unsplitNamespace(self._name[1], self._name[0])
+
+    def getAbsoluteName(self):
+        if self._name[0] is None and None not in self._nsMap:
+            # No default namespace provided
+            return self._name[1]
+        return "{%s}%s" % (self._nsMap[self._name[0]], self._name[1])
 
     def addChild(self, childNode):
         # If the previous node in the list is character data, drop it, since
@@ -178,7 +179,7 @@ class _AbstractNode(object):
         # necessary
         for (nsName, attrName), attrVal in nonNsAttr:
             if nsName is not None and nsName not in self._nsMap:
-                raise Exception("Reference to undefined namespace %s" % nsName)
+                raise UndefinedNamespaceError(nsName)
             self._otherAttributes[(nsName, attrName)] = attrVal
 
     def _buildElementTreeName(self, name, namespace = None):
