@@ -76,6 +76,7 @@ class _AbstractNode(SerializableObject):
         if nsName is not None and nsName not in self._nsMap:
             raise UndefinedNamespaceError(nsName)
         self._name = (nsName, tagName)
+        return self
 
     def getName(self):
         return unsplitNamespace(self._name[1], self._name[0])
@@ -226,6 +227,8 @@ class IntegerNode(BaseNode):
     an integer when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to 0.
     """
+    _name = (None, 'int')
+
     def finalize(self):
         text = self.getText()
         try:
@@ -233,9 +236,8 @@ class IntegerNode(BaseNode):
         except ValueError:
             return 0
 
-class TextNode(BaseNode):
-    """A node containing just test. Useful for representing elements with
-    character data in them"""
+    def _iterChildren(self):
+        yield str(self.finalize())
 
 class SerializableList(list):
     def getElementTree(self, parent = None):
@@ -284,9 +286,14 @@ class StringNode(BaseNode):
     a string when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to ''.
     """
+    _name = (None, 'string')
+
     def finalize(self):
         text = self.getText()
         return text
+
+    def _iterChildren(self):
+        yield self.finalize()
 
 class NullNode(BaseNode):
     """
@@ -296,8 +303,13 @@ class NullNode(BaseNode):
     None when finalize is called. All attributes and tags will be lost.
     All text will be lost.
     """
+    _name = (None, 'none')
+
     def finalize(self):
         pass
+
+    def _iterChildren(self):
+        return []
 
 class BooleanNode(BaseNode):
     """
@@ -307,6 +319,8 @@ class BooleanNode(BaseNode):
     a bool when finalize is called. All attributes and tags will be lost.
     '1' or 'true' (case insensitive) will result in True.
     """
+    _name = (None, 'bool')
+
     def finalize(self):
         text = self.getText()
         return self.fromString(text)
@@ -319,18 +333,8 @@ class BooleanNode(BaseNode):
     def toString(boolVal):
         return boolVal and "true" or "false"
 
-
-class DictNode(BaseNode):
-    """
-    Dict container class for SAX parser.
-
-    Registering a tag with this class will return the __dict__  of this class
-    when finalize is called. This effectively means all tags will be
-    preserved, but all attributes will be lost.
-    """
-    def finalize(self):
-        return dict(x for x in self.__dict__.iteritems() \
-                if not x[0].startswith('_'))
+    def _iterChildren(self):
+        yield self.toString(self.finalize())
 
 class BindingHandler(sax.ContentHandler):
     """
@@ -443,57 +447,10 @@ class DataBinder(object):
         self.contentHandler.rootNode = None
         return rootNode
 
-    @staticmethod
-    def _etree_add(elem, obj):
-        if isinstance(obj, list):
-            elem.extend(obj)
-        else:
-            elem.append(obj)
-
-    def _to_etree_r(self, obj, suggestedName = None):
-        name = suggestedName or obj.__class__.__name__
-
-        elem = etree.Element(name)
-        if hasattr(obj, 'getElementTree'):
-            elem = obj.getElementTree()
-        elif isinstance(obj, bool):
-            elem.text = (obj and 'true' or 'false')
-        elif isinstance(obj, (int, float, long)):
-            elem.text = str(obj)
-        elif isinstance(obj, (str, unicode)):
-            elem.text = obj
-        elif isinstance(obj, (list, set, tuple)):
-            elem = [ self._to_etree_r(child, suggestedName) for child in obj]
-        elif isinstance(obj, dict):
-            for childName, child in sorted(obj.iteritems()):
-                self._etree_add(elem, self._to_etree_r(child, suggestedName = childName))
-        else:
-            # Not sure what to do
-            pass
-        return elem
-
-    @staticmethod
-    def _toString(obj):
-        if isinstance(obj, (str, unicode)):
-            return obj
-        return str(obj)
-
-    def toXml(self, obj, suggestedName = None):
-        tree = self._to_etree_r(obj, suggestedName)
-        res = etree.tostring(tree, pretty_print = True,
+    def toXml(self, obj, prettyPrint = True):
+        tree = obj.getElementTree()
+        res = etree.tostring(tree, pretty_print = prettyPrint,
             xml_declaration = True, encoding = 'UTF-8')
-        return res
-
-    def _toXml(self, obj, suggestedName = None):
-        encoding = None
-        tree = self._to_etree_r(obj, suggestedName)
-        if isinstance(tree, list):
-            res = [ etree.tostring(x, pretty_print = False,
-                xml_declaration = False, encoding = encoding) for x in tree ]
-            res = ''.join(res)
-        else:
-            res = etree.tostring(tree, pretty_print = False,
-                xml_declaration = False, encoding = encoding)
         return res
 
 def splitNamespace(tag):
