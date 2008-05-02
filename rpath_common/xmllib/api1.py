@@ -34,7 +34,7 @@ class SerializableObject(object):
         attrs = {}
         for attrName, attrVal in self._iterAttributes():
             if isinstance(attrVal, bool):
-                attrVal = attrVal and "true" or "false"
+                attrVal = BooleanNode.toString(attrVal)
             elif not isinstance(attrVal, (str, unicode)):
                 attrVal = str(attrVal)
             attrs[attrName] = attrVal
@@ -61,7 +61,7 @@ class SerializableObject(object):
     def _iterChildren(self):
         raise NotImplementedError()
 
-class _AbstractNode(object):
+class _AbstractNode(SerializableObject):
     __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
                  '_otherAttributes', ]
     def __init__(self, attributes = None, nsMap = None, name = None):
@@ -113,6 +113,7 @@ class _AbstractNode(object):
             # characters after children
         else:
             self._children.append(ch)
+        return self
 
     def getNamespaceMap(self):
         return self._nsMap.copy()
@@ -143,43 +144,23 @@ class _AbstractNode(object):
             return ''
         return text[0]
 
-    def getElementTree(self, parent = None):
+    #{ Methods for serializing Node objects
+    def _getName(self):
         if self._name[0] is None:
-            name = self._name[1]
-        else:
-            name = "{%s}%s" % (self._nsMap[self._name[0]], self._name[1])
+            return self._name[1]
+        return "{%s}%s" % (self._nsMap[self._name[0]], self._name[1])
 
-        attrs = {}
+    def _getLocalNamespaces(self):
+        return self._nsAttributes
+
+    def _iterAttributes(self):
         for (nsName, attrName), attrVal in self._otherAttributes.items():
             attrName = self._buildElementTreeName(attrName, nsName)
-            attrs[attrName] = attrVal
+            yield (attrName, attrVal)
 
-        elem = createElementTree(name, attrs, self._nsAttributes,
-                                 parent = parent)
-        for child in self.iterChildren():
-            if hasattr(child, 'getElementTree'):
-                child.getElementTree(parent = elem)
-            elif isinstance(child, (str, unicode)):
-                elem.text = child
-            elif isinstance(child, tuple):
-                self._getElementTreeFromTuple(child, elem)
-            else:
-                # XXX
-                pass
-        return elem
-
-    def _getElementTreeFromTuple(self, child, parent = None):
-        nsName, tagName = splitNamespace(child[0])
-        elemName = self._buildElementTreeName(tagName, nsName)
-        nelem = createElementTree(elemName, {}, parent = parent)
-        val = None
-        if isinstance(child[1], bool):
-            val = child[1] and 'true' or 'false'
-        elif isinstance(child[1], (str, unicode)):
-            val = child[1]
-        else:
-            val = str(child[1])
-        nelem.text = val
+    def _iterChildren(self):
+        return self.iterChildren()
+    #}
 
     def _setAttributes(self, attributes):
         self._nsAttributes = {}
@@ -253,7 +234,47 @@ class IntegerNode(BaseNode):
             return 0
 
 class TextNode(BaseNode):
-    pass
+    """A node containing just test. Useful for representing elements with
+    character data in them"""
+
+class SerializableList(list):
+    def getElementTree(self, parent = None):
+        elem = createElementTree(self._getName(), {}, {}, parent = parent)
+        for child in self:
+            child.getElementTree(parent = elem)
+        return elem
+
+    def _getName(self):
+        return self.tag
+
+class SlotBasedSerializableObject(SerializableObject):
+    def _getName(self):
+        return self.tag
+
+    def _getLocalNamespaces(self):
+        return {}
+
+    def _iterAttributes(self):
+        return self._splitData()[0].items()
+
+    def _iterChildren(self):
+        return self._splitData()[1]
+
+    def _splitData(self):
+        attrs = {}
+        children = []
+        for fName in self.__slots__:
+            fVal = getattr(self, fName)
+            if isinstance(fVal, (bool, int, str, unicode)):
+                attrs[fName] = fVal
+            elif fVal is None:
+                # Skip None values
+                continue
+            else:
+                if not hasattr(fVal, "getElementTree"):
+                    raise XmlLibError("Expected an object implementing getElementTree")
+                children.append(fVal)
+        return attrs, children
 
 class StringNode(BaseNode):
     """
@@ -288,7 +309,16 @@ class BooleanNode(BaseNode):
     """
     def finalize(self):
         text = self.getText()
-        return text.strip().upper() in ('TRUE', '1')
+        return self.fromString(text)
+
+    @staticmethod
+    def fromString(stringVal):
+        return stringVal.strip().upper() in ('TRUE', '1')
+
+    @staticmethod
+    def toString(boolVal):
+        return boolVal and "true" or "false"
+
 
 class DictNode(BaseNode):
     """
@@ -424,7 +454,9 @@ class DataBinder(object):
         name = suggestedName or obj.__class__.__name__
 
         elem = etree.Element(name)
-        if isinstance(obj, bool):
+        if hasattr(obj, 'getElementTree'):
+            elem = obj.getElementTree()
+        elif isinstance(obj, bool):
             elem.text = (obj and 'true' or 'false')
         elif isinstance(obj, (int, float, long)):
             elem.text = str(obj)
@@ -436,7 +468,8 @@ class DataBinder(object):
             for childName, child in sorted(obj.iteritems()):
                 self._etree_add(elem, self._to_etree_r(child, suggestedName = childName))
         else:
-            elem = obj.getElementTree()
+            # Not sure what to do
+            pass
         return elem
 
     @staticmethod
