@@ -131,8 +131,27 @@ class _AbstractNode(SerializableObject):
             else:
                 yield ("%s:%s" % (nsName, attrName), attrVal)
 
+    def iterNamespaces(self):
+        for nsName, nsVal in sorted(self._nsAttributes.items()):
+            yield nsName, nsVal
+
     def getAttribute(self, name, namespace = None):
         return self._otherAttributes.get((namespace, name))
+
+    def getAttributeByNamespace(self, name, namespace = None):
+        """Retrieve an attribute using its full namespace designation"""
+        if namespace is None:
+            # Nothing different from getAttribute
+            return self.getAttribute(name)
+
+        # Get all aliases that correspond to this namespace
+        aliases = [ x for (x, y) in self._nsMap.items() if y == namespace ]
+        # Sort them (this way the default namespace comes first)
+        aliases.sort()
+        for alias in aliases:
+            if (alias, name) in self._otherAttributes:
+                return self._otherAttributes[(alias, name)]
+        return None
 
     def getChildren(self, name, namespace = None):
         tagName = unsplitNamespace(name, namespace)
@@ -163,6 +182,7 @@ class _AbstractNode(SerializableObject):
         return self.iterChildren()
     #}
 
+    #{ Private methods
     def _setAttributes(self, attributes):
         self._nsAttributes = {}
         self._otherAttributes = {}
@@ -197,7 +217,7 @@ class _AbstractNode(SerializableObject):
         if namespace is None:
             return name
         return "{%s}%s" % (self._nsMap[namespace], name)
-
+    #}
 
 class BaseNode(_AbstractNode):
     pass
@@ -398,32 +418,34 @@ class DataBinder(object):
 
     parseFile: takes a a path and returns a python object.
     parseString: takes a string containing XML data and returns a python
-        object.
+    object.
     registerType: register a tag with a class defining how to treat XML content.
     toXml: takes an object and renders it into an XML representation.
 
-    EXAMPLE:
-    class ComplexType(BaseNode):
-        _singleChildren = ['foo', 'bar']
+    EXAMPLE::
 
-    binder = DataBinder()
-    binder.registerType('foo', BooleanNode)
-    binder.registerType('bar', NullNode)
-    binder.registerType('baz', ComplexType)
+        class ComplexType(BaseNode):
+            _singleChildren = ['foo', 'bar']
 
-    obj = binder.parseString('<baz><foo>TRUE</foo><bar>test</bar></baz>')
+        binder = DataBinder()
+        binder.registerType('foo', BooleanNode)
+        binder.registerType('bar', NullNode)
+        binder.registerType('baz', ComplexType)
 
-    obj.foo == True
-    obj.bar == 'test'
+        obj = binder.parseString('<baz><foo>TRUE</foo><bar>test</bar></baz>')
 
-    EXAMPLE:
-    binder = DataBinder()
-    class baz(object):
-        pass
-    obj = baz()
-    obj.foo = True
-    obj.bar = 'test'
-    binder.toXml(obj) == '<baz><foo>true</foo><bar>test</bar></baz>'
+        obj.foo == True
+        obj.bar == 'test'
+
+    EXAMPLE::
+
+        binder = DataBinder()
+        class baz(object):
+            pass
+        obj = baz()
+        obj.foo = True
+        obj.bar = 'test'
+        binder.toXml(obj) == '<baz><foo>true</foo><bar>test</bar></baz>'
     """
     def __init__(self, typeDict = None):
         self.contentHandler = BindingHandler(typeDict)
