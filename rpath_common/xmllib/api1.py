@@ -31,6 +31,7 @@ class UndefinedNamespaceError(XmlLibError):
     "Raised when a reference to an undefined namespace is found"
 #}
 
+#{ Base classes
 class SerializableObject(object):
     """
     Base class for an XML-serializable object
@@ -340,10 +341,11 @@ class _AbstractNode(SerializableObject):
         return "{%s}%s" % (self._nsMap[namespace], name)
     #}
 
-#{ Specialized nodes
 class BaseNode(_AbstractNode):
     """Base node for parsing XML data"""
+#}
 
+#{ Specialized nodes
 class GenericNode(BaseNode):
     """
     Base node for all data classes used by SAX handler. Neither this class,
@@ -467,6 +469,8 @@ class BooleanNode(BaseNode):
 
 #}
 
+
+#{ Specialized objects that can be serialized
 class SerializableList(list):
     """A List class that can be serialized to XML"""
 
@@ -540,7 +544,9 @@ class SlotBasedSerializableObject(SerializableObject):
                         "Expected an object implementing getElementTree")
                 children.append(fVal)
         return attrs, children
+#}
 
+#{ Binding classes
 class BindingHandler(sax.ContentHandler):
     """
     Sax Content handler class.
@@ -739,6 +745,7 @@ class DataBinder(object):
         res = etree.tostring(tree, pretty_print = prettyPrint,
             xml_declaration = True, encoding = 'UTF-8')
         return res
+#}
 
 def splitNamespace(tag):
     """
