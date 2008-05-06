@@ -11,6 +11,12 @@
 # or fitness for a particular purpose. See the Common Public License for
 # full details.
 #
+"""
+The rPath XML Library API.
+
+All interfaces in this modules that do not start with a C{_}
+character are public interfaces.
+"""
 
 import StringIO
 import os
@@ -28,7 +34,18 @@ class UndefinedNamespaceError(XmlLibError):
 #}
 
 class SerializableObject(object):
+    """
+    Base class for an XML-serializable object
+    """
+
     def getElementTree(self, parent = None):
+        """Any serializable object should implement the C{getElementTree}
+        method, which returns a hierarchy of objects that represent the
+        structure of the XML document.
+
+        @param parent: An optional parent object.
+        @type parent: C{SerializableObject} instance
+        """
         name = self._getName()
 
         attrs = {}
@@ -50,18 +67,35 @@ class SerializableObject(object):
         return elem
 
     def _getName(self):
+        """
+        @return: the node's XML tag
+        @rtype: C{str}
+        """
         raise NotImplementedError()
 
     def _getLocalNamespaces(self):
+        """
+        @return: the locally defined namespaces
+        @rtype: C{dict}
+        """
         raise NotImplementedError()
 
     def _iterAttributes(self):
+        """
+        Iterate over this node's attributes.
+        @return: iteratable of (attributeName, attributeValue)
+        @rtype: iterable of (attributeName, attributeValue) strings
+        """
         raise NotImplementedError()
 
     def _iterChildren(self):
+        """
+        Iterate over the node's children
+        """
         raise NotImplementedError()
 
 class _AbstractNode(SerializableObject):
+    """Abstract node class for parsing XML data"""
     __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
                  '_otherAttributes', ]
     def __init__(self, attributes = None, nsMap = None, name = None):
@@ -72,6 +106,7 @@ class _AbstractNode(SerializableObject):
             self.setName(name)
 
     def setName(self, name):
+        """Set the node's name"""
         nsName, tagName = splitNamespace(name)
         if nsName is not None and nsName not in self._nsMap:
             raise UndefinedNamespaceError(nsName)
@@ -79,15 +114,30 @@ class _AbstractNode(SerializableObject):
         return self
 
     def getName(self):
+        """
+        @return: the node's name
+        @rtype: C{str}
+        """
         return unsplitNamespace(self._name[1], self._name[0])
 
     def getAbsoluteName(self):
+        """
+        Retrieve the node's absolute name (qualified with the full
+        namespace), in the format C{{namespace}node}
+        @return: the node's absolute name
+        @rtype: C{str}
+        """
         if self._name[0] is None and None not in self._nsMap:
             # No default namespace provided
             return self._name[1]
         return "{%s}%s" % (self._nsMap[self._name[0]], self._name[1])
 
     def addChild(self, childNode):
+        """
+        Add a child node to this node
+        @param childNode: Child node to be added to this node
+        @type childNode: Node
+        """
         # If the previous node in the list is character data, drop it, since
         # we don't support mixed content
         if self._children and isinstance(self._children[-1], unicode):
@@ -220,7 +270,7 @@ class _AbstractNode(SerializableObject):
     #}
 
 class BaseNode(_AbstractNode):
-    pass
+    """Base node for parsing XML data"""
 
 class GenericNode(BaseNode):
     """
@@ -347,6 +397,8 @@ class BooleanNode(BaseNode):
 
     @staticmethod
     def fromString(stringVal):
+        if isinstance(stringVal, bool):
+            return stringVal
         return stringVal.strip().upper() in ('TRUE', '1')
 
     @staticmethod
@@ -412,9 +464,53 @@ class DataBinder(object):
     """
     DataBinder class.
 
-    This class wraps all XML parsing logic in this module. As a rough rule
-    of thumb, attributes of an XML tag will be treated as class level
-    attributes, while subtags will populate an object's main dictionary.
+    This class wraps all XML parsing logic in this module.
+
+    For the simple case, the binder can be used as-is, by invoking the
+    C{parseString} method, in which case a hierarchy of C{BaseNode} objects
+    will be produced. The top-level node can be also used for serializing
+    back to XML
+
+    EXAMPLE::
+
+        binder = DataBinder()
+        obj = binder.parseString('<baz><foo>3</foo><bar>test</bar></baz>')
+        data = binder.toXml(prettyPrint = False)
+        # data == '<baz><foo>3</foo><bar>test</bar></baz>'
+
+    A node's attributes can be retrieved with C{iterAttributes}, and its
+    children with C{iterChildren}. The node's text can be retrieved with
+    C{getText}. Please note that we do not support character data and nodes
+    mixed under the same parent. For insntance, the following XML construct
+    will not be properly handled::
+
+        <node>Some text<child>Child1</child>and some other text</node>
+
+    To convert simple data types (like integer or boolean nodes) into their
+    corresponding Python representation, you can use the built-in
+    C{IntegerNode}, C{BooleanNode} and C{StringNode}. These objects implement
+    a C{finalize} method that will convert the object's text into the proper
+    data type (and ignore other possible child nodes).
+
+    For a more convenient mapping of the data structures parsed from XML into
+    rich Python objects, you can register your own classes, generally
+    inherited from C{BaseNode}, that will overwrite the C{addChild} method to
+    change the default behavior. You can choose to store children in a
+    different way, instead of the default data structure of children.
+
+    EXAMLPLE::
+
+        binder = xmllib.DataBinder()
+        class MyClass(BaseNode):
+            def addChild(self, child):
+                if child.getName() == 'isPresent':
+                    self.present = child.finalize()
+
+        binder.registerType(MyClass, name = 'node')
+        binder.registerType(BooleanNode, name = 'isPresent')
+
+        obj = binder.parseString('<node><isPresent>true</isPresent></node>')
+        # obj.isPresent == true
 
     parseFile: takes a a path and returns a python object.
     parseString: takes a string containing XML data and returns a python
@@ -422,43 +518,51 @@ class DataBinder(object):
     registerType: register a tag with a class defining how to treat XML content.
     toXml: takes an object and renders it into an XML representation.
 
-    EXAMPLE::
-
-        class ComplexType(BaseNode):
-            _singleChildren = ['foo', 'bar']
-
-        binder = DataBinder()
-        binder.registerType('foo', BooleanNode)
-        binder.registerType('bar', NullNode)
-        binder.registerType('baz', ComplexType)
-
-        obj = binder.parseString('<baz><foo>TRUE</foo><bar>test</bar></baz>')
-
-        obj.foo == True
-        obj.bar == 'test'
-
-    EXAMPLE::
-
-        binder = DataBinder()
-        class baz(object):
-            pass
-        obj = baz()
-        obj.foo = True
-        obj.bar = 'test'
-        binder.toXml(obj) == '<baz><foo>true</foo><bar>test</bar></baz>'
     """
     def __init__(self, typeDict = None):
+        """
+        Initialize the Binder object.
+
+        @param typeDict: optional type mapping object
+        @type typeDict: dict
+        """
         self.contentHandler = BindingHandler(typeDict)
 
     def registerType(self, klass, name = None, namespace = None):
+        """
+        Register a new class with a node name. As the XML parser encounters
+        nodes, it will try to instantiate the classes registered with the
+        node's name, and will fall back to the BaseNode class if a more
+        specific class could not be found.
+
+        If the optional keyword argument C{name} is not specified, the name
+        of the node will be compared with the class' C{name} field (a
+        class-level attribute).
+        """
         return self.contentHandler.registerType(klass, name = name,
                                                 namespace = namespace)
 
     def parseString(self, data):
+        """
+        Parse an XML string.
+        @param data: the XML string to be parsed
+        @type data: C{str}
+        @return: a Node object
+        @rtype: A previosly registered class (using C{registerType} or a
+        C{BaseNode}.
+        """
         stream = StringIO.StringIO(data)
         return self.parseFile(stream)
 
     def parseFile(self, stream):
+        """
+        Parse an XML file.
+        @param data: the XML file to be parsed
+        @type data: C{file}
+        @return: a Node object
+        @rtype: A previosly registered class (using C{registerType} or a
+        C{BaseNode}.
+        """
         if isinstance(stream, str):
             stream = file(stream)
         self.contentHandler.rootNode = None
@@ -470,6 +574,18 @@ class DataBinder(object):
         return rootNode
 
     def toXml(self, obj, prettyPrint = True):
+        """
+        Serialize an object to XML.
+
+        @param obj: An object implementing a C{getElementTree} mthod.
+        @type obj: C{obj}
+        @param prettyPrint: if True (the default), the XML that is produced
+        will be formatted for easier reading by humans (by introducing new
+        lines and white spaces).
+        @type prettyPrint: C{bool}
+        @return: the XML representation of the object
+        @rtype: str
+        """
         tree = obj.getElementTree()
         res = etree.tostring(tree, pretty_print = prettyPrint,
             xml_declaration = True, encoding = 'UTF-8')
@@ -512,3 +628,63 @@ def createElementTree(name, attrs, nsMap = None, parent = None):
     else:
         elem = etree.Element(name, attrs, nsMap)
     return elem
+
+class NodeDispatcher(object):
+    """Simple class that dispatches nodes of various types to various
+    registered classes.
+
+    The registered classes need to implement a C{getTag()} static method or
+    class method, that returns the name of the tags we want to be registered
+    with this node.
+    """
+
+    def __init__(self, nsMap = None):
+        """
+        @param nsMap: a namespace mapping from aliases to the namespace
+        string. For example, for the following declaration::
+
+            <node xmlns="namespace1" xmlns:ns="namespace2"/>
+
+        the mapping will be {None: "namespace1", "ns" : "namespace2"}
+        @type nsMap: C{dict}
+        """
+
+        self._dispatcher = {}
+        self._nsMap = nsMap or {}
+
+    def registerType(self, nodeType, name = None, namespace = None):
+        if name is None:
+            if not hasattr(nodeType, 'getTag'):
+                return
+            ns, name = splitNamespace(nodeType.getTag())
+        else:
+            ns, name = namespace, name
+
+        key = "{%s}%s" % (self._nsMap.get(ns, ''), name)
+        self._dispatcher[key] = nodeType
+
+    def registerClasses(self, module, baseClass):
+        """Register all classes that are a subclass of baseClass and are part
+        of the module.
+        @param module: The module in which supported classes will be looked up.
+        @type module: module
+        @param baseClass: A base class for all the classes that have to be
+        registered.
+        @type baseClass: class
+        """
+        for symVal in module.__dict__.itervalues():
+            if not isinstance(symVal, type):
+                continue
+            if issubclass(symVal, baseClass) and symVal != baseClass:
+                self.registerType(symVal)
+
+    def dispatch(self, node):
+        """Create objects for this node, based on the classes registered with
+        the dispatcher"""
+
+        absName = node.getAbsoluteName()
+        if absName not in self._dispatcher:
+            return None
+        nodeClass = self._dispatcher.get(absName)
+
+        return nodeClass(node)
