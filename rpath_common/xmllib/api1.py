@@ -340,6 +340,7 @@ class _AbstractNode(SerializableObject):
         return "{%s}%s" % (self._nsMap[namespace], name)
     #}
 
+#{ Specialized nodes
 class BaseNode(_AbstractNode):
     """Base node for parsing XML data"""
 
@@ -382,6 +383,7 @@ class IntegerNode(BaseNode):
     # docstring inherited from parent class
     def _iterChildren(self):
         yield str(self.finalize())
+#}
 
 class SerializableList(list):
     """A List class that can be serialized to XML"""
@@ -528,7 +530,7 @@ class BooleanNode(BaseNode):
         """
         Convert boolean value to character data.
         @param boolVal: Boolean value to be converted
-        @type stringVal: C{bool}
+        @type boolVal: C{bool}
         @rtype: C{str}
         """
         return boolVal and "true" or "false"
@@ -702,8 +704,8 @@ class DataBinder(object):
     def parseFile(self, stream):
         """
         Parse an XML file.
-        @param data: the XML file to be parsed
-        @type data: C{file}
+        @param stream: the XML file to be parsed
+        @type stream: C{file}
         @return: a Node object
         @rtype: A previosly registered class (using C{registerType} or a
         C{BaseNode}.

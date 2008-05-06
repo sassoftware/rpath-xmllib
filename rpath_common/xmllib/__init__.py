@@ -12,7 +12,7 @@
 # full details.
 #
 """
-The rPath Common Library Module for XML parsing
+The rPath Common Library Module for XML parsing.
 
 This module provides a stable interface for reading and writing
 rPath-generated XML files.  This interface will be
