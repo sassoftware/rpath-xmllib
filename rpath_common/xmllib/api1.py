@@ -383,81 +383,6 @@ class IntegerNode(BaseNode):
     # docstring inherited from parent class
     def _iterChildren(self):
         yield str(self.finalize())
-#}
-
-class SerializableList(list):
-    """A List class that can be serialized to XML"""
-
-    tag = None
-
-    def getElementTree(self, parent = None):
-        """Return a hierarchy of objects that represent the
-        structure of the XML document.
-
-        @param parent: An optional parent object.
-        @type parent: C{SerializableObject} instance
-        """
-        elem = createElementTree(self._getName(), {}, {}, parent = parent)
-        for child in self:
-            child.getElementTree(parent = elem)
-        return elem
-
-    # pylint: disable-msg=C0111
-    # docstring inherited from parent class
-    def _getName(self):
-        return self.tag
-
-# pylint: disable-msg=R0903
-# Too few public methods (1/2): this is an interface
-class SlotBasedSerializableObject(SerializableObject):
-    """
-    A serializable object that uses the slots for defining the data that
-    has to be serialized to XML
-    """
-    __slots__ = []
-    tag = None
-
-    # pylint: disable-msg=C0111
-    # docstring inherited from parent class
-    def _getName(self):
-        return self.tag
-
-    # pylint: disable-msg=C0111
-    # docstring inherited from parent class
-    def _getLocalNamespaces(self):
-        return {}
-
-    # pylint: disable-msg=C0111
-    # docstring inherited from parent class
-    def _iterAttributes(self):
-        return self._splitData()[0].items()
-
-    # pylint: disable-msg=C0111
-    # docstring inherited from parent class
-    def _iterChildren(self):
-        return self._splitData()[1]
-
-    def _splitData(self):
-        """
-        Split attributes and child nodes from the slots
-        @return: A tuple (attributes, children)
-        @rtype: C{tuple}
-        """
-        attrs = {}
-        children = []
-        for fName in self.__slots__:
-            fVal = getattr(self, fName)
-            if isinstance(fVal, (bool, int, str, unicode)):
-                attrs[fName] = fVal
-            elif fVal is None:
-                # Skip None values
-                continue
-            else:
-                if not hasattr(fVal, "getElementTree"):
-                    raise XmlLibError(
-                        "Expected an object implementing getElementTree")
-                children.append(fVal)
-        return attrs, children
 
 class StringNode(BaseNode):
     """
@@ -539,6 +464,82 @@ class BooleanNode(BaseNode):
     # docstring inherited from parent class
     def _iterChildren(self):
         yield self.toString(self.finalize())
+
+#}
+
+class SerializableList(list):
+    """A List class that can be serialized to XML"""
+
+    tag = None
+
+    def getElementTree(self, parent = None):
+        """Return a hierarchy of objects that represent the
+        structure of the XML document.
+
+        @param parent: An optional parent object.
+        @type parent: C{SerializableObject} instance
+        """
+        elem = createElementTree(self._getName(), {}, {}, parent = parent)
+        for child in self:
+            child.getElementTree(parent = elem)
+        return elem
+
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
+    def _getName(self):
+        return self.tag
+
+# pylint: disable-msg=R0903
+# Too few public methods (1/2): this is an interface
+class SlotBasedSerializableObject(SerializableObject):
+    """
+    A serializable object that uses the slots for defining the data that
+    has to be serialized to XML
+    """
+    __slots__ = []
+    tag = None
+
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
+    def _getName(self):
+        return self.tag
+
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
+    def _getLocalNamespaces(self):
+        return {}
+
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
+    def _iterAttributes(self):
+        return self._splitData()[0].items()
+
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
+    def _iterChildren(self):
+        return self._splitData()[1]
+
+    def _splitData(self):
+        """
+        Split attributes and child nodes from the slots
+        @return: A tuple (attributes, children)
+        @rtype: C{tuple}
+        """
+        attrs = {}
+        children = []
+        for fName in self.__slots__:
+            fVal = getattr(self, fName)
+            if isinstance(fVal, (bool, int, str, unicode)):
+                attrs[fName] = fVal
+            elif fVal is None:
+                # Skip None values
+                continue
+            else:
+                if not hasattr(fVal, "getElementTree"):
+                    raise XmlLibError(
+                        "Expected an object implementing getElementTree")
+                children.append(fVal)
+        return attrs, children
 
 class BindingHandler(sax.ContentHandler):
     """
