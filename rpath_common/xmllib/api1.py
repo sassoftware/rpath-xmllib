@@ -149,14 +149,22 @@ class _AbstractNode(SerializableObject):
                 self._children.append(childNode.finalize())
 
     def iterChildren(self):
+        "Iterate over this node's children"
         if hasattr(self, '_childOrder'):
             return orderItems(self._children, self._childOrder)
         return iter(self._children)
 
     def finalize(self):
+        "Post-process this node (e.g. cast text to the expected type)"
         return self
 
     def characters(self, ch):
+        """Add character data to this node.
+        @param ch: Character data to be added
+        @type ch: C{str}
+        @return: self
+        @rtype: C{type(self)}
+        """
         if self._children:
             if isinstance(self._children[-1], unicode):
                 self._children[-1] += ch
@@ -167,9 +175,15 @@ class _AbstractNode(SerializableObject):
         return self
 
     def getNamespaceMap(self):
+        "Return a copy of the namespace mapping"
         return self._nsMap.copy()
 
     def iterAttributes(self):
+        """
+        Iterate over this node's attributes.
+        @return: iterable of (attributeName, attributeValue)
+        @rtype: iterable of (attributeName, attributeValue) strings
+        """
         for nsName, nsVal in sorted(self._nsAttributes.items()):
             if nsName is None:
                 yield ('xmlns', nsVal)
@@ -182,14 +196,41 @@ class _AbstractNode(SerializableObject):
                 yield ("%s:%s" % (nsName, attrName), attrVal)
 
     def iterNamespaces(self):
+        """
+        Iterate over this node's namespaces
+        @return: iterable of (namespaceAlias, namespaceValue), with a
+        C{namespaceAlias} equal to {None} for the default namespace.
+        @rtype: iterable of (namespaceAlias, namespaceValue) strings
+        """
         for nsName, nsVal in sorted(self._nsAttributes.items()):
             yield nsName, nsVal
 
     def getAttribute(self, name, namespace = None):
+        """
+        Get an attribute's value.
+        @param name: the attribute name
+        @type name: C{str}
+        @param namespace: the namespace alias for the attribute (or None for
+        the attribute with this name from the default namespace).
+        @type namespace: C{str} or C{None}
+        @return: the attribute's value
+        @rtype: C{str}
+        """
         return self._otherAttributes.get((namespace, name))
 
     def getAttributeByNamespace(self, name, namespace = None):
-        """Retrieve an attribute using its full namespace designation"""
+        """
+        Retrieve an attribute using its full namespace designation
+        @param name: the attribute name
+        @type name: C{str}
+        @param namespace: the full namespace for the attribute. Passing
+        C{None} is equivalent to calling C{getAttribute} with the name and no
+        namespace, i.e. the node's attribute will be returned only if no
+        default namespace is set.
+        @type namespace: C{str} or C{None}
+        @return: the attribute's value
+        @rtype: C{str}
+        """
         if namespace is None:
             # Nothing different from getAttribute
             return self.getAttribute(name)
@@ -204,36 +245,56 @@ class _AbstractNode(SerializableObject):
         return None
 
     def getChildren(self, name, namespace = None):
+        """
+        Get a node's children, by name and (the optional) namespace.
+        @param name: the attribute name
+        @type name: C{str}
+        @param namespace: the namespace alias for the attribute (or None for
+        the attribute with this name from the default namespace).
+        @type namespace: C{str} or C{None}
+        @return: The children nodes with the specified name.
+        @rtype: C{list}
+        """
         tagName = unsplitNamespace(name, namespace)
         return [ x for x in self.iterChildren()
             if hasattr(x, 'getName') and x.getName() == tagName ]
 
     def getText(self):
+        "Return a node's character data"
         text = [ x for x in self._children if isinstance(x, (str, unicode)) ]
         if not text:
             return ''
         return text[0]
 
     #{ Methods for serializing Node objects
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _getName(self):
         if self._name[0] is None:
             return self._name[1]
         return "{%s}%s" % (self._nsMap[self._name[0]], self._name[1])
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _getLocalNamespaces(self):
         return self._nsAttributes
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterAttributes(self):
         for (nsName, attrName), attrVal in self._otherAttributes.items():
             attrName = self._buildElementTreeName(attrName, nsName)
             yield (attrName, attrVal)
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterChildren(self):
         return self.iterChildren()
     #}
 
     #{ Private methods
     def _setAttributes(self, attributes):
+        "Set a node's attributes"
         self._nsAttributes = {}
         self._otherAttributes = {}
         if attributes is None:
@@ -264,6 +325,7 @@ class _AbstractNode(SerializableObject):
             self._otherAttributes[(nsName, attrName)] = attrVal
 
     def _buildElementTreeName(self, name, namespace = None):
+        "Convenience function for building a namespace-qualified node name"
         if namespace is None:
             return name
         return "{%s}%s" % (self._nsMap[namespace], name)
@@ -653,6 +715,17 @@ class NodeDispatcher(object):
         self._nsMap = nsMap or {}
 
     def registerType(self, nodeType, name = None, namespace = None):
+        """
+        Register a class as a node handler.
+        @param nodeType: A node class to register
+        @type nodeType: C{class}
+        @param name: the node name for which C{dispatch} will instantiate the
+        node type class. If None, the name and namespace will be extracted by
+        calling the class-level method C{getTag} of the node type class.
+        @type name: C{str} or None
+        @param namespace: An optional namespace
+        @type namespace: C{str} or None
+        """
         if name is None:
             if not hasattr(nodeType, 'getTag'):
                 return
@@ -664,7 +737,8 @@ class NodeDispatcher(object):
         self._dispatcher[key] = nodeType
 
     def registerClasses(self, module, baseClass):
-        """Register all classes that are a subclass of baseClass and are part
+        """
+        Register all classes that are a subclass of baseClass and are part
         of the module.
         @param module: The module in which supported classes will be looked up.
         @type module: module
@@ -679,8 +753,10 @@ class NodeDispatcher(object):
                 self.registerType(symVal)
 
     def dispatch(self, node):
-        """Create objects for this node, based on the classes registered with
-        the dispatcher"""
+        """
+        Create objects for this node, based on the classes registered with
+        the dispatcher.
+        """
 
         absName = node.getAbsoluteName()
         if absName not in self._dispatcher:
