@@ -99,6 +99,7 @@ class _AbstractNode(SerializableObject):
     """Abstract node class for parsing XML data"""
     __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
                  '_otherAttributes', ]
+    _name = (None, None)
 
     def __init__(self, attributes = None, nsMap = None, name = None):
         SerializableObject.__init__(self)
@@ -106,9 +107,6 @@ class _AbstractNode(SerializableObject):
         self._nsMap = nsMap or {}
         self._nsAttributes = {}
         self._otherAttributes = {}
-        # Prefer the class-based attribute if it is available
-        if not hasattr(self.__class__, '_name'):
-            self._name = (None, None)
         self._setAttributes(attributes)
         if name is not None:
             self.setName(name)
@@ -418,7 +416,6 @@ class NullNode(BaseNode):
 
     def finalize(self):
         "Discard the character data"
-        pass
 
     # pylint: disable-msg=C0111
     # docstring inherited from parent class
