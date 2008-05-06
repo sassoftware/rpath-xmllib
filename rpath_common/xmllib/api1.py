@@ -498,7 +498,7 @@ class DataBinder(object):
     change the default behavior. You can choose to store children in a
     different way, instead of the default data structure of children.
 
-    EXAMLPLE::
+    EXAMPLE::
 
         binder = xmllib.DataBinder()
         class MyClass(BaseNode):
