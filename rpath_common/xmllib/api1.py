@@ -19,8 +19,6 @@ character are public interfaces.
 """
 
 import StringIO
-import os
-import subprocess
 from xml import sax
 
 from lxml import etree
@@ -38,6 +36,8 @@ class SerializableObject(object):
     Base class for an XML-serializable object
     """
 
+    # pylint: disable-msg=R0903
+    # Too few public methods (1/2): this is an interface
     def getElementTree(self, parent = None):
         """Any serializable object should implement the C{getElementTree}
         method, which returns a hierarchy of objects that represent the
@@ -98,9 +98,16 @@ class _AbstractNode(SerializableObject):
     """Abstract node class for parsing XML data"""
     __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
                  '_otherAttributes', ]
+
     def __init__(self, attributes = None, nsMap = None, name = None):
+        SerializableObject.__init__(self)
         self._children = []
         self._nsMap = nsMap or {}
+        self._nsAttributes = {}
+        self._otherAttributes = {}
+        # Prefer the class-based attribute if it is available
+        if not hasattr(self.__class__, '_name'):
+            self._name = (None, None)
         self._setAttributes(attributes)
         if name is not None:
             self.setName(name)
@@ -151,6 +158,8 @@ class _AbstractNode(SerializableObject):
     def iterChildren(self):
         "Iterate over this node's children"
         if hasattr(self, '_childOrder'):
+            # pylint: disable-msg=E1101
+            # no '_childOrder' member: we just tested for that
             return orderItems(self._children, self._childOrder)
         return iter(self._children)
 
@@ -362,39 +371,76 @@ class IntegerNode(BaseNode):
     _name = (None, 'int')
 
     def finalize(self):
+        "Convert the character data to an integer"
         text = self.getText()
         try:
             return int(text)
         except ValueError:
             return 0
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterChildren(self):
         yield str(self.finalize())
 
 class SerializableList(list):
+    """A List class that can be serialized to XML"""
+
+    tag = None
+
     def getElementTree(self, parent = None):
+        """Return a hierarchy of objects that represent the
+        structure of the XML document.
+
+        @param parent: An optional parent object.
+        @type parent: C{SerializableObject} instance
+        """
         elem = createElementTree(self._getName(), {}, {}, parent = parent)
         for child in self:
             child.getElementTree(parent = elem)
         return elem
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _getName(self):
         return self.tag
 
+# pylint: disable-msg=R0903
+# Too few public methods (1/2): this is an interface
 class SlotBasedSerializableObject(SerializableObject):
+    """
+    A serializable object that uses the slots for defining the data that
+    has to be serialized to XML
+    """
+    __slots__ = []
+    tag = None
+
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _getName(self):
         return self.tag
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _getLocalNamespaces(self):
         return {}
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterAttributes(self):
         return self._splitData()[0].items()
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterChildren(self):
         return self._splitData()[1]
 
     def _splitData(self):
+        """
+        Split attributes and child nodes from the slots
+        @return: A tuple (attributes, children)
+        @rtype: C{tuple}
+        """
         attrs = {}
         children = []
         for fName in self.__slots__:
@@ -406,7 +452,8 @@ class SlotBasedSerializableObject(SerializableObject):
                 continue
             else:
                 if not hasattr(fVal, "getElementTree"):
-                    raise XmlLibError("Expected an object implementing getElementTree")
+                    raise XmlLibError(
+                        "Expected an object implementing getElementTree")
                 children.append(fVal)
         return attrs, children
 
@@ -421,9 +468,12 @@ class StringNode(BaseNode):
     _name = (None, 'string')
 
     def finalize(self):
+        "Convert the text data to a string"
         text = self.getText()
         return text
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterChildren(self):
         yield self.finalize()
 
@@ -438,8 +488,11 @@ class NullNode(BaseNode):
     _name = (None, 'none')
 
     def finalize(self):
+        "Discard the character data"
         pass
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterChildren(self):
         return []
 
@@ -454,19 +507,34 @@ class BooleanNode(BaseNode):
     _name = (None, 'bool')
 
     def finalize(self):
+        "Convert the character data to a boolean value"
         text = self.getText()
         return self.fromString(text)
 
     @staticmethod
     def fromString(stringVal):
+        """
+        Convert character data to a boolean value
+        @param stringVal: String value to be converted to boolean
+        @type stringVal: C{str}
+        @rtype: C{bool}
+        """
         if isinstance(stringVal, bool):
             return stringVal
         return stringVal.strip().upper() in ('TRUE', '1')
 
     @staticmethod
     def toString(boolVal):
+        """
+        Convert boolean value to character data.
+        @param boolVal: Boolean value to be converted
+        @type stringVal: C{bool}
+        @rtype: C{str}
+        """
         return boolVal and "true" or "false"
 
+    # pylint: disable-msg=C0111
+    # docstring inherited from parent class
     def _iterChildren(self):
         yield self.toString(self.finalize())
 
@@ -489,6 +557,17 @@ class BindingHandler(sax.ContentHandler):
         sax.ContentHandler.__init__(self)
 
     def registerType(self, typeClass, name = None, namespace = None):
+        """
+        Register a class as a node handler.
+        @param typeClass: A node class to register
+        @type typeClass: C{class}
+        @param name: the node name for which C{dispatch} will instantiate the
+        node type class. If None, the name and namespace will be extracted by
+        calling the class-level method C{getTag} of the node type class.
+        @type name: C{str} or None
+        @param namespace: An optional namespace
+        @type namespace: C{str} or None
+        """
         if name is None:
             name = typeClass.name
         if namespace is None:
@@ -497,6 +576,7 @@ class BindingHandler(sax.ContentHandler):
         self.typeDict[(namespace, name)] = typeClass
 
     def startElement(self, name, attrs):
+        "SAX parser callback invoked when a start element event is emitted"
         classType = GenericNode
         nameSpace, tagName = splitNamespace(name)
         if (nameSpace, tagName) in self.typeDict:
@@ -511,13 +591,16 @@ class BindingHandler(sax.ContentHandler):
         self.stack.append(newNode)
 
     def endElement(self, name):
+        "SAX parser callback invoked when an end element event is emitted"
         elem = self.stack.pop()
+        assert(elem.getName() == name)
         if not self.stack:
             self.rootNode = elem.finalize()
         else:
             self.stack[-1].addChild(elem)
 
     def characters(self, ch):
+        "SAX parser callback invoked when character data is found"
         elem = self.stack[-1]
         elem.characters(ch)
 
@@ -635,7 +718,8 @@ class DataBinder(object):
         self.contentHandler.rootNode = None
         return rootNode
 
-    def toXml(self, obj, prettyPrint = True):
+    @classmethod
+    def toXml(cls, obj, prettyPrint = True):
         """
         Serialize an object to XML.
 
@@ -654,7 +738,8 @@ class DataBinder(object):
         return res
 
 def splitNamespace(tag):
-    """Splits the namespace out of the tag.
+    """
+    Splits the namespace out of the tag.
     @param tag: tag
     @type tag: C{str}
     @return: A tuple with the namespace (set to None if not present) and
@@ -667,22 +752,54 @@ def splitNamespace(tag):
     return arr[0], arr[1]
 
 def unsplitNamespace(name, namespace = None):
+    """
+    @param name: Name
+    @type name: C{str}
+    @param namespace: Namespace
+    @type namespace: C{str} or None
+    @return: the name qualified with the namespace
+    @rtype: C{str}
+    """
     if namespace is None:
         return name
     return "%s:%s" % (namespace, name)
 
 def orderItems(items, order):
+    """
+    Reorder a list of items based on the order passed in as a list
+    @param items:
+    @type items: iterable
+    @param order: list defining the items' ordering
+    @type order: C{list}
+    @return: the ordered list, unknown elements at the end
+    @rtype: C{list}
+    """
     # sort key is a three part tuple. each element maps to these rules:
     # element one reflects if we know how to order the element.
     # element two reflects the element's position in the ordering.
     # element three sorts everything else by simply providing the original
     # item (aka. default ordering of sort)
+    orderHash = dict((y, i) for i, y in enumerate(order))
     return sorted(items,
-        key = lambda x: (x.getName() not in order,
-                         x.getName() in order and order.index(x.getName()),
+        key = lambda x: (x.getName() not in orderHash,
+                         orderHash.get(x.getName()),
                          x.getName()))
 
 def createElementTree(name, attrs, nsMap = None, parent = None):
+    """
+    Create an element tree.
+
+    @param name: Node name
+    @type name: C{str}
+    @param attrs: Node attributes
+    @type attrs: C{dict}
+    @param nsMap: A namespace alias to namespace mapping
+    @type nsMap: C{dict}
+    @param parent: An optional parent object.
+    @type parent: C{etree.Element} instance
+    @return: an element tree
+    @rtype: C{etree.Element} instance
+    """
     if nsMap is None:
         nsMap = {}
     if parent is not None:
@@ -714,11 +831,11 @@ class NodeDispatcher(object):
         self._dispatcher = {}
         self._nsMap = nsMap or {}
 
-    def registerType(self, nodeType, name = None, namespace = None):
+    def registerType(self, typeClass, name = None, namespace = None):
         """
         Register a class as a node handler.
-        @param nodeType: A node class to register
-        @type nodeType: C{class}
+        @param typeClass: A node class to register
+        @type typeClass: C{class}
         @param name: the node name for which C{dispatch} will instantiate the
         node type class. If None, the name and namespace will be extracted by
         calling the class-level method C{getTag} of the node type class.
@@ -727,14 +844,14 @@ class NodeDispatcher(object):
         @type namespace: C{str} or None
         """
         if name is None:
-            if not hasattr(nodeType, 'getTag'):
+            if not hasattr(typeClass, 'getTag'):
                 return
-            ns, name = splitNamespace(nodeType.getTag())
+            ns, name = splitNamespace(typeClass.getTag())
         else:
             ns, name = namespace, name
 
         key = "{%s}%s" % (self._nsMap.get(ns, ''), name)
-        self._dispatcher[key] = nodeType
+        self._dispatcher[key] = typeClass
 
     def registerClasses(self, module, baseClass):
         """
