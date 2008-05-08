@@ -535,6 +535,8 @@ class SlotBasedSerializableObject(SerializableObject):
             elif fVal is None:
                 # Skip None values
                 continue
+            elif isinstance(fVal, list):
+                children.append(fVal)
             else:
                 if not hasattr(fVal, "getElementTree"):
                     raise XmlLibError(
