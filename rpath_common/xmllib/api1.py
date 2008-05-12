@@ -609,6 +609,42 @@ class ToplevelNode(object):
             self.attrs = contentHandler._attrs
             return
 
+    def getAttributesByNamespace(self, namespace):
+        """
+        Retrieve the top-level node's attributes associated with the specified
+        namespace.
+
+        Example::
+
+            Given the XML specification:
+            <node xmlns:x="urlX" x:a="1" x:b="2" attr="3" />
+
+            the method, called with namespace "urlX", will return
+            {"a" : "1", "b" : "2"}
+
+        @return: The attributes associated with the namespace
+        @rtype: dict
+        """
+        nsMap = {}
+        otherAttrs = {}
+        for k, v in self.attrs.items():
+            arr = k.split(':', 1)
+            if arr[0] == 'xmlns':
+                if len(arr) == 1:
+                    nsAlias = None
+                else:
+                    nsAlias = arr[1]
+                nsMap[v] = nsAlias
+            else:
+                if len(arr) == 1:
+                    attrNs, attrK = None, arr[0]
+                else:
+                    attrNs, attrK = arr
+                otherAttrs.setdefault(attrNs, {})[attrK] = v
+        if namespace not in nsMap:
+            return {}
+        return otherAttrs.get(nsMap[namespace], {})
+
 #{ Binding classes
 class BindingHandler(sax.ContentHandler):
     """
