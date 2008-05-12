@@ -29,6 +29,9 @@ class XmlLibError(Exception):
 
 class UndefinedNamespaceError(XmlLibError):
     "Raised when a reference to an undefined namespace is found"
+
+class InvalidXML(XmlLibError):
+    "Raised when the XML data is invalid"
 #}
 
 #{ Base classes
@@ -821,7 +824,10 @@ class DataBinder(object):
         self.contentHandler.rootNode = None
         parser = sax.make_parser()
         parser.setContentHandler(self.contentHandler)
-        parser.parse(stream)
+        try:
+            parser.parse(stream)
+        except sax.SAXParseException:
+            raise InvalidXML
         rootNode = self.contentHandler.rootNode
         self.contentHandler.rootNode = None
         return rootNode
