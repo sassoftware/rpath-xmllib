@@ -545,6 +545,70 @@ class SlotBasedSerializableObject(SerializableObject):
         return attrs, children
 #}
 
+class ToplevelNode(object):
+    """
+    A class that extracts the first node out of an XML stream
+
+    @ivar name: the name of the top-level node
+    @type name: C{unicode}
+    @ivar attrs: the node's attributes
+    @type attrs: C{dict}
+    """
+
+    class _FirstTagFound(Exception):
+        pass
+
+    class _Handler(sax.ContentHandler):
+        def __init__(self):
+            sax.ContentHandler.__init__(self)
+            self._name = None
+            self._attrs = None
+
+        def startElement(self, name, attrs):
+            self._name = name
+            self._attrs = dict((k, v) for (k, v) in attrs.items())
+            raise ToplevelNode._FirstTagFound()
+
+        def endElement(self, name):
+            "This method should never be called"
+
+        def characters(self, ch):
+            "This method should never be called"
+
+    def __init__(self, stream):
+        """
+        Read the top-level node.
+
+        @param stream: the XML stream
+        @type stream: C{str} or C{file}
+        """
+        self.name = None
+        self.attrs = {}
+
+        self.parseStream(stream)
+
+    def parseStream(self, stream):
+        """
+        Parse the stream and extract the top-level node name and attributes.
+
+        @param stream: the XML stream
+        @type stream: C{str} or C{file}
+        """
+        if not hasattr(stream, 'read'):
+            stream = StringIO.StringIO(stream)
+
+        contentHandler = self._Handler()
+        parser = sax.make_parser()
+        parser.setContentHandler(contentHandler)
+        try:
+            parser.parse(stream)
+        except sax.SAXParseException:
+            return
+        except self._FirstTagFound:
+            self.name = contentHandler._name
+            self.attrs = contentHandler._attrs
+            return
+
 #{ Binding classes
 class BindingHandler(sax.ContentHandler):
     """
