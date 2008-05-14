@@ -18,6 +18,7 @@ All interfaces in this modules that do not start with a C{_}
 character are public interfaces.
 """
 
+import os
 import StringIO
 from xml import sax
 
@@ -32,6 +33,15 @@ class UndefinedNamespaceError(XmlLibError):
 
 class InvalidXML(XmlLibError):
     "Raised when the XML data is invalid"
+
+class SchemaValidationError(XmlLibError):
+    "Raised when the XML data is not validating against the XML schema"
+
+class UnknownSchemaError(SchemaValidationError):
+    """
+    Raised when an unknown or missing schema was specified in the XML document
+    """
+
 #}
 
 #{ Base classes
@@ -774,7 +784,13 @@ class DataBinder(object):
     registerType: register a tag with a class defining how to treat XML content.
     toXml: takes an object and renders it into an XML representation.
 
+    @cvar xmlSchemaNamespace: Namespace for XML schema. This should not
+    change.
+    @type xmlSchemaNamespace: C{str}
+
     """
+    xmlSchemaNamespace = 'http://www.w3.org/2001/XMLSchema-instance'
+
     def __init__(self, typeDict = None):
         """
         Initialize the Binder object.
@@ -798,29 +814,47 @@ class DataBinder(object):
         return self.contentHandler.registerType(klass, name = name,
                                                 namespace = namespace)
 
-    def parseString(self, data):
+    def parseString(self, data, validate = False, schemaDir = None):
         """
         Parse an XML string.
         @param data: the XML string to be parsed
         @type data: C{str}
+        @param validate: Validate before parsing (off by default)
+        @type validate: C{bool}
+        @param schemaDir: A directory where schema files are stored
+        @type schemaDir: C{str}
+
         @return: a Node object
         @rtype: A previosly registered class (using C{registerType} or a
         C{BaseNode}.
+        @raises C{UnknownSchemaError}: if no valid schema was found
+        @raises C{InvalidXML}: if the XML is malformed.
         """
         stream = StringIO.StringIO(data)
-        return self.parseFile(stream)
+        return self.parseFile(stream, validate = validate,
+                              schemaDir = schemaDir)
 
-    def parseFile(self, stream):
+    def parseFile(self, stream, validate = False, schemaDir = None):
         """
         Parse an XML file.
         @param stream: the XML file to be parsed
         @type stream: C{file}
+        @param validate: Validate before parsing (off by default)
+        @type validate: C{bool}
+        @param schemaDir: A directory where schema files are stored
+        @type schemaDir: C{str}
+
         @return: a Node object
         @rtype: A previosly registered class (using C{registerType} or a
         C{BaseNode}.
+        @raises C{UnknownSchemaError}: if no valid schema was found
+        @raises C{InvalidXML}: if the XML is malformed.
         """
         if isinstance(stream, str):
             stream = file(stream)
+        if validate:
+            self.validate(stream, schemaDir = schemaDir)
+
         self.contentHandler.rootNode = None
         parser = sax.make_parser()
         parser.setContentHandler(self.contentHandler)
@@ -831,6 +865,86 @@ class DataBinder(object):
         rootNode = self.contentHandler.rootNode
         self.contentHandler.rootNode = None
         return rootNode
+
+    @classmethod
+    def getSchemaLocationsFromStream(cls, stream):
+        """
+        Extract the schema locations from an XML stream.
+        @param stream: an XML stream
+        @type stream: C{file}
+        @return: A list of schema locations found in the document
+        @rtype: C{list}
+        @raises C{UnknownSchemaError}: if no schema location was specified in
+        the trove.
+        @raises C{InvalidXML}: if the XML is malformed.
+        """
+        # We need the schema location, so extract the top-level node
+
+        # Make sure we roll the stream back where it was
+        pos = stream.tell()
+        tn = ToplevelNode(stream)
+        stream.seek(pos)
+
+        if tn.name is None:
+            raise InvalidXML("Possibly malformed XML")
+        attrs = tn.getAttributesByNamespace(cls.xmlSchemaNamespace)
+        schemaLocation = attrs.get('schemaLocation')
+        if schemaLocation is None:
+            raise UnknownSchemaError(
+                "Schema location not specified in XML stream")
+        schemaFiles = [ os.path.basename(x) for x in schemaLocation.split() ]
+        return schemaFiles
+
+    @classmethod
+    def chooseSchemaFile(cls, schemaFiles, schemaDir):
+        """
+        Given a list of schema files, choose the one that we can find in
+        the specified directory.
+        @param schemaFiles: A list of schema files
+        @type schemaFiles: C{list}
+        @param schemaDir: A directory where schema files reside
+        @type schemaDir: C{str}
+        @return: path to the schema file
+        @rtype: C{str}
+        @raises C{UnknownSchemaError}: if no valid schema was found
+        """
+        if schemaDir is None:
+            raise UnknownSchemaError("Schema directory not specified")
+        if not os.path.isdir(schemaDir):
+            raise UnknownSchemaError("Schema directory `%s' not found" %
+                schemaDir)
+
+        # Pick up the first schema that we could find, in the order they were
+        # specified
+        localFiles = os.listdir(schemaDir)
+
+        possibleSchema = set(schemaFiles).intersection(localFiles)
+        if not possibleSchema:
+            raise UnknownSchemaError(
+                "No applicable schema found in directory `%s'" % schemaDir)
+
+        for sch in schemaFiles:
+            if sch in possibleSchema:
+                return os.path.join(schemaDir, sch)
+
+    @classmethod
+    def validate(cls, stream, schemaDir = None):
+        """
+        Validate a stream against schema files found in a directory.
+        @param stream: an XML stream
+        @type stream: C{file}
+        @param schemaDir: A directory where schema files reside
+        @type schemaDir: C{str}
+        @raises C{UnknownSchemaError}: if no valid schema was found
+        @raises C{InvalidXML}: if the XML is malformed.
+        """
+        validSchema = cls.getSchemaLocationsFromStream(stream)
+        schemaFile = cls.chooseSchemaFile(validSchema, schemaDir)
+
+        schema = etree.XMLSchema(file = schemaFile)
+        tree = etree.parse(stream)
+        if not schema.validate(tree):
+            raise SchemaValidationError(str(schema.error_log))
 
     @classmethod
     def toXml(cls, obj, prettyPrint = True):
