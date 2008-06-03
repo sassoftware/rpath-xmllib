@@ -513,6 +513,17 @@ class SlotBasedSerializableObject(SerializableObject):
     __slots__ = []
     tag = None
 
+    def __eq__(self, obj):
+        for key in self.__slots__:
+            val = self.__getattribute__(key)
+            val2 = obj.__getattribute__(key)
+            if val != val2:
+                return False
+        return True
+
+    def __ne__(self, obj):
+        return not self.__eq__(obj)
+
     # pylint: disable-msg=C0111
     # docstring inherited from parent class
     def _getName(self):
