@@ -14,6 +14,8 @@
 
 all: default-subdirs default-all
 
+.PHONY: clean dist install html docs
+
 export TOPDIR = $(shell pwd)
 export DISTDIR = $(TOPDIR)/rpath-xmllib-$(VERSION)
 
@@ -41,6 +43,10 @@ archive:
 	hg --config 'ui.archivemeta=False' archive --exclude .hgignore -t tbz2 $(DISTDIR).tar.bz2
 
 forcedist: archive
+
+doc: html
+html:
+	scripts/generate_docs.sh
 
 tag:
 	hg tag -f rpath-xmllib-$(VERSION)

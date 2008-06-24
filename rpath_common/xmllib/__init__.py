@@ -25,7 +25,7 @@ All interfaces in this modules that do not start with a C{_}
 character are public interfaces.
 
 If the C{VERSION} starts with C{0.}, none of the included
-interfaces is stable and the may change without warning.
+interfaces is stable and they may change without warning.
 
 To use the latest version of the interface::
 
