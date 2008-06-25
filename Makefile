@@ -48,8 +48,10 @@ doc: html
 html:
 	scripts/generate_docs.sh
 
-tag:
+forcetag:
 	hg tag -f rpath-xmllib-$(VERSION)
+tag:
+	hg tag rpath-xmllib-$(VERSION)
 
 clean: clean-subdirs default-clean
 	@rm -rf $(DISTDIR).tar.bz2
