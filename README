@@ -9,5 +9,9 @@ and beta releases, including 0.x releases and any automated builds.
 
 To use the latest version of the interface:
     from rpath_common import xmllib
-To use a specific API Version of the interface:
+To use a specific API version of the interface:
     from rpath_common.xmllib import api1 as xmllib
+
+API documentation is available at http://cvs.rpath.com/rpath-xmllib-docs/
+or by running "make html" and viewing docs/developer/index.html (requires
+epydoc).
