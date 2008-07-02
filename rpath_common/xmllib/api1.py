@@ -863,18 +863,24 @@ class DataBinder(object):
         """
         if isinstance(stream, str):
             stream = file(stream)
-        if validate:
-            self.validate(stream, schemaDir = schemaDir)
-
-        self.contentHandler.rootNode = None
-        parser = sax.make_parser()
-        parser.setContentHandler(self.contentHandler)
+        origPos = stream.tell()
         try:
-            parser.parse(stream)
-        except sax.SAXParseException:
-            raise InvalidXML
-        rootNode = self.contentHandler.rootNode
-        self.contentHandler.rootNode = None
+            if validate:
+                stream.seek(0)
+                self.validate(stream, schemaDir = schemaDir)
+            stream.seek(0)
+
+            self.contentHandler.rootNode = None
+            parser = sax.make_parser()
+            parser.setContentHandler(self.contentHandler)
+            try:
+                parser.parse(stream)
+            except sax.SAXParseException, e:
+                raise InvalidXML
+            rootNode = self.contentHandler.rootNode
+            self.contentHandler.rootNode = None
+        finally:
+            stream.seek(origPos)
         return rootNode
 
     @classmethod
