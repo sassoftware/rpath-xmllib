@@ -1,4 +1,7 @@
 Changes in 0.1:
   o API Changes:
+    * xmldata.py moved into rpath_common module as xmllib
+  o Bug Fixes:
+    * parseFile method now seeks before and after attempting to read the stream
     * xmldata.py moved from Conary into rpath_common module as xmllib,
       and interface significantly changed.
