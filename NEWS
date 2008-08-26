@@ -1,4 +1,4 @@
-Changes in @NEW@:
+Changes in 0.2:
   o Bug Fixes:
     * parseFile method now seeks before and after attempting to read
       the stream.
