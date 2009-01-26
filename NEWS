@@ -1,3 +1,7 @@
+Changes in 1.0:
+  o General Availability:
+    * rpath-xmllib is now stable software released for general use.
+
 Changes in 0.2:
   o Bug Fixes:
     * parseFile method now seeks before and after attempting to read
