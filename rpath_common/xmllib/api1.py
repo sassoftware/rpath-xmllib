@@ -514,6 +514,9 @@ class SlotBasedSerializableObject(SerializableObject):
     tag = None
 
     def __eq__(self, obj):
+        # We should only compare class instances
+        if type(self) != type(obj):
+            return False
         for key in self.__slots__:
             val = self.__getattribute__(key)
             val2 = obj.__getattribute__(key)
