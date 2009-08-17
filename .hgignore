@@ -6,6 +6,6 @@
 .*\.so$
 ^tmp/
 docs/developer/.*
-rpath_common/xmllib/xmllib_constants.pyc?$
+rpath_xmllib/xmllib_constants.pyc?$
 ^pylint/reports/
 ^rpath-common-.*.tar.bz2

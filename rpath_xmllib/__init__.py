@@ -29,17 +29,17 @@ interfaces is stable and they may change without warning.
 
 To use the latest version of the interface::
 
-    from rpath_common import xmllib
+    import rpath_xmllib
 
 To use a specific API Version of the interface::
 
-    from rpath_common.xmllib import api1 as xmllib
+    from rpath_xmllib import api1 as xmllib
 """
 
 # Default to current API version
 #pylint: disable-msg=W0401
-from rpath_common.xmllib.api1 import *
+from rpath_xmllib.api1 import *
 
 # Import the automatically-generated VERSION
 #pylint: disable-msg=W0212
-from rpath_common.xmllib.xmllib_constants import _VERSION as VERSION
+from rpath_xmllib.xmllib_constants import _VERSION as VERSION

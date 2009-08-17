@@ -17,4 +17,4 @@ import sys
 sys.path.insert(0, os.environ['CONARY_PATH'])
 sys.path.insert(0, os.path.abspath('../..'))
 
-from rpath_common.xmllib import api1
+from rpath_xmllib import api1

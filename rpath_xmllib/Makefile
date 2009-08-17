@@ -19,19 +19,19 @@ dist_files = Makefile xmllib_constants.py.in $(python_files)
 
 all: default-all xmllib_constants.py
 
-xmllib_constants.py: xmllib_constants.py.in ../../Makefile ../../Make.defs Makefile
+xmllib_constants.py: xmllib_constants.py.in ../Makefile ../Make.defs Makefile
 	sed -e s,@version@,$(VERSION),g \
 	$< > $@
 
 install: all pyfiles-install default-install
-	install xmllib_constants.py $(DESTDIR)$(pydir)/xmllib/xmllib_constants.py
-	$(PYTHON) -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/xmllib', ddir='$(pydir)/xmllib', quiet=1)"
-	$(PYTHON) -OO -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)/xmllib', ddir='$(pydir)/xmllib', quiet=1)"
+	install xmllib_constants.py $(DESTDIR)$(pydir)/xmllib_constants.py
+	$(PYTHON) -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)', ddir='$(pydir)', quiet=1)"
+	$(PYTHON) -OO -c "import compileall; compileall.compile_dir('$(DESTDIR)$(pydir)', ddir='$(pydir)', quiet=1)"
 
 dist: default-dist
 
 clean: default-clean
 	rm -f xmllib_constants.py
 
-include ../../Make.rules
-include ../../Make.defs
+include ../Make.rules
+include ../Make.defs

@@ -15,7 +15,7 @@
 The rPath XML Library API Constants definition
 
 The module data elements in this module are a private interface,
-available through the rpath_common.proddef module.
+available through the rpath_xmllib module.
 @var _VERSION: rPath XML Library API version
 @type _VERSION: string
 """
