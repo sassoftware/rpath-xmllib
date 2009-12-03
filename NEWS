@@ -1,4 +1,7 @@
-Changes in @NEW@:
+Changes in 1.1:
+  o API Changes
+    * Moved to a new namespace, rpath_xmllib. rpath_common.xmllib is
+      still available for backwards compatibility.
 
 Changes in 1.0:
   o General Availability:
