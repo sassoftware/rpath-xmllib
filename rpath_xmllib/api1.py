@@ -117,6 +117,7 @@ class _AbstractNode(SerializableObject):
 
     def __init__(self, attributes = None, nsMap = None, name = None):
         SerializableObject.__init__(self)
+        self._name = (None, None)
         self._children = []
         self._nsMap = nsMap or {}
         self._nsAttributes = {}
