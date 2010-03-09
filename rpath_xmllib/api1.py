@@ -113,11 +113,11 @@ class SerializableObject(object):
 class _AbstractNode(SerializableObject):
     """Abstract node class for parsing XML data"""
     __slots__ = ('_children', '_nsMap', '_name', '_nsAttributes',
-                 '_otherAttributes', )
+                 '_otherAttributes', '_singleChildren', )
 
     def __init__(self, attributes = None, nsMap = None, name = None):
         SerializableObject.__init__(self)
-        self._name = (None, None)
+        self._name = (None, name)
         self._children = []
         self._nsMap = nsMap or {}
         self._nsAttributes = {}
@@ -377,9 +377,6 @@ class GenericNode(BaseNode):
 
     __slots__ = ()
 
-    def __init__(self, attributes = None, nsMap = None):
-        BaseNode.__init__(self, attributes = attributes, nsMap = nsMap)
-
 class IntegerNode(BaseNode):
     """
     Integer data class for SAX parser.
@@ -392,7 +389,7 @@ class IntegerNode(BaseNode):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        self._name = (None, 'int')
+        kwargs.setdefault('name', 'int')
         BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
@@ -420,7 +417,7 @@ class StringNode(BaseNode):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        self._name = (None, 'string')
+        kwargs.setdefault('name', 'string')
         BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
@@ -445,7 +442,7 @@ class NullNode(BaseNode):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        self._name = (None, 'none')
+        kwargs.setdefault('name', 'none')
         BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
@@ -468,7 +465,7 @@ class BooleanNode(BaseNode):
     __slots__ = ()
 
     def __init__(self, *args, **kwargs):
-        self._name = (None, 'bool')
+        kwargs.setdefault('name', 'bool')
         BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
