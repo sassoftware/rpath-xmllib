@@ -50,6 +50,8 @@ class SerializableObject(object):
     Base class for an XML-serializable object
     """
 
+    __slots__ = ()
+
     # pylint: disable-msg=R0903
     # Too few public methods (1/2): this is an interface
     def getElementTree(self, parent = None):
@@ -110,12 +112,12 @@ class SerializableObject(object):
 
 class _AbstractNode(SerializableObject):
     """Abstract node class for parsing XML data"""
-    __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
-                 '_otherAttributes', ]
-    _name = (None, None)
+    __slots__ = ('_children', '_nsMap', '_name', '_nsAttributes',
+                 '_otherAttributes', '_singleChildren', )
 
     def __init__(self, attributes = None, nsMap = None, name = None):
         SerializableObject.__init__(self)
+        self._name = (None, name)
         self._children = []
         self._nsMap = nsMap or {}
         self._nsAttributes = {}
@@ -354,6 +356,8 @@ class _AbstractNode(SerializableObject):
 
 class BaseNode(_AbstractNode):
     """Base node for parsing XML data"""
+
+    __slots__ = ()
 #}
 
 #{ Specialized nodes
@@ -371,8 +375,7 @@ class GenericNode(BaseNode):
     attribute in _singleChildren will cause the value to be stored directly.
     """
 
-    def __init__(self, attributes = None, nsMap = None):
-        BaseNode.__init__(self, attributes = attributes, nsMap = nsMap)
+    __slots__ = ()
 
 class IntegerNode(BaseNode):
     """
@@ -382,7 +385,12 @@ class IntegerNode(BaseNode):
     an integer when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to 0.
     """
-    _name = (None, 'int')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'int')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Convert the character data to an integer"
@@ -405,7 +413,12 @@ class StringNode(BaseNode):
     a string when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to ''.
     """
-    _name = (None, 'string')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'string')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Convert the text data to a string"
@@ -425,7 +438,12 @@ class NullNode(BaseNode):
     None when finalize is called. All attributes and tags will be lost.
     All text will be lost.
     """
-    _name = (None, 'none')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'none')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Discard the character data"
@@ -443,7 +461,12 @@ class BooleanNode(BaseNode):
     a bool when finalize is called. All attributes and tags will be lost.
     '1' or 'true' (case insensitive) will result in True.
     """
-    _name = (None, 'bool')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'bool')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Convert the character data to a boolean value"
