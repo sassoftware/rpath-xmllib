@@ -23,6 +23,7 @@ import StringIO
 from xml import sax
 
 from lxml import etree
+import collections
 
 #{ Exception classes
 class XmlLibError(Exception):
@@ -739,6 +740,23 @@ class BindingHandler(sax.ContentHandler):
         elem = self.stack[-1]
         elem.characters(ch)
 
+class StreamingBindingHandler(BindingHandler):
+    def __init__(self, typeDict=None):
+        BindingHandler.__init__(self, typeDict=typeDict)
+        self.generatedNodes = collections.deque()
+
+    def endElement(self, name):
+        elem = BindingHandler.endElement(self, name)
+        if getattr(elem, "WillYield", None):
+            self.generatedNodes.append(elem)
+
+    def next(self):
+        if not self.generatedNodes:
+            return None
+        return self.generatedNodes.popleft()
+
+    def clear(self):
+        return self.generatedNodes.clear()
 
 class DataBinder(object):
     """
@@ -804,6 +822,7 @@ class DataBinder(object):
 
     """
     xmlSchemaNamespace = 'http://www.w3.org/2001/XMLSchema-instance'
+    BindingHandlerFactory = BindingHandler
 
     def __init__(self, typeDict = None):
         """
@@ -812,7 +831,7 @@ class DataBinder(object):
         @param typeDict: optional type mapping object
         @type typeDict: dict
         """
-        self.contentHandler = BindingHandler(typeDict)
+        self.contentHandler = self.BindingHandlerFactory(typeDict)
 
     def registerType(self, klass, name = None, namespace = None):
         """
@@ -873,18 +892,9 @@ class DataBinder(object):
                 self.validate(stream, schemaDir = schemaDir)
             stream.seek(0)
 
-            self.contentHandler.rootNode = None
-            parser = sax.make_parser()
-            parser.setContentHandler(self.contentHandler)
-            try:
-                parser.parse(stream)
-            except sax.SAXParseException, e:
-                raise InvalidXML
-            rootNode = self.contentHandler.rootNode
-            self.contentHandler.rootNode = None
+            return self._parse(stream)
         finally:
             stream.seek(origPos)
-        return rootNode
 
     @classmethod
     def getSchemaLocationsFromStream(cls, stream):
@@ -984,6 +994,48 @@ class DataBinder(object):
         res = etree.tostring(tree, pretty_print = prettyPrint,
             xml_declaration = True, encoding = 'UTF-8')
         return res
+
+    def _parse(self, stream):
+        self.contentHandler.rootNode = None
+        parser = sax.make_parser()
+        parser.setContentHandler(self.contentHandler)
+        try:
+            parser.parse(stream)
+        except sax.SAXParseException, e:
+            raise InvalidXML
+        rootNode = self.contentHandler.rootNode
+        self.contentHandler.rootNode = None
+        return rootNode
+
+class StreamingDataBinder(DataBinder):
+    BindingHandlerFactory = StreamingBindingHandler
+
+    class _Iterator(object):
+        BUFFER_SIZE = 16 * 1024
+        def __init__(self, parser, stream):
+            self.parser = parser
+            self.stream = stream
+            self.contentHandler = self.parser.getContentHandler()
+            self.contentHandler.clear()
+
+        def __iter__(self):
+            return self
+
+        def next(self):
+            node = self.contentHandler.next()
+            if node is not None:
+                return node
+            buf = self.stream.read(self.BUFFER_SIZE)
+            if not buf:
+                self.parser.close()
+                raise StopIteration()
+            self.parser.feed(buf)
+            return self.next()
+
+    def _parse(self, stream):
+        parser = sax.make_parser()
+        parser.setContentHandler(self.contentHandler)
+        return self._Iterator(parser, stream)
 #}
 
 def splitNamespace(tag):
