@@ -734,6 +734,7 @@ class BindingHandler(sax.ContentHandler):
             self.rootNode = elem.finalize()
         else:
             self.stack[-1].addChild(elem)
+        return elem
 
     def characters(self, ch):
         "SAX parser callback invoked when character data is found"
@@ -749,6 +750,7 @@ class StreamingBindingHandler(BindingHandler):
         elem = BindingHandler.endElement(self, name)
         if getattr(elem, "WillYield", None):
             self.generatedNodes.append(elem)
+        return elem
 
     def next(self):
         if not self.generatedNodes:
