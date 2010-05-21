@@ -728,13 +728,19 @@ class BindingHandler(sax.ContentHandler):
 
     def endElement(self, name):
         "SAX parser callback invoked when an end element event is emitted"
+        elem = self._handleEndElement(name)
+        self._processEndElement(elem)
+
+    def _handleEndElement(self, name):
         elem = self.stack.pop()
-        assert(elem.getName() == name)
+        assert elem.getName() == name
+        return elem
+
+    def _processEndElement(self, elem):
         if not self.stack:
             self.rootNode = elem.finalize()
         else:
             self.stack[-1].addChild(elem)
-        return elem
 
     def characters(self, ch):
         "SAX parser callback invoked when character data is found"
@@ -747,10 +753,12 @@ class StreamingBindingHandler(BindingHandler):
         self.generatedNodes = collections.deque()
 
     def endElement(self, name):
-        elem = BindingHandler.endElement(self, name)
+        "SAX parser callback invoked when an end element event is emitted"
+        elem = self._handleEndElement(name)
         if getattr(elem, "WillYield", None):
-            self.generatedNodes.append(elem)
-        return elem
+            self.generatedNodes.append(elem.finalize())
+            return
+        self._processEndElement(elem)
 
     def next(self):
         if not self.generatedNodes:
