@@ -1,3 +1,9 @@
+Changes in @NEW@:
+  o API Chages
+    * Added __slots__ to all node instances so that consumers of rpath_xmllib
+      can have nodes without instance dictionaries. This should greatly improve
+      the memory footprint when parsing large xml files.
+
 Changes in 1.1:
   o API Changes
     * Moved to a new namespace, rpath_xmllib. rpath_common.xmllib is
