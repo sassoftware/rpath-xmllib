@@ -1011,7 +1011,7 @@ class DataBinder(object):
         parser.setContentHandler(self.contentHandler)
         try:
             parser.parse(stream)
-        except sax.SAXParseException, e:
+        except sax.SAXParseException:
             raise InvalidXML
         rootNode = self.contentHandler.rootNode
         self.contentHandler.rootNode = None
