@@ -114,7 +114,7 @@ class SerializableObject(object):
 class _AbstractNode(SerializableObject):
     """Abstract node class for parsing XML data"""
     __slots__ = ('_children', '_nsMap', '_name', '_nsAttributes',
-                 '_otherAttributes', '_singleChildren', )
+                 '_otherAttributes', )
 
     def __init__(self, attributes = None, nsMap = None, name = None):
         SerializableObject.__init__(self)
