@@ -1,4 +1,4 @@
-Changes in @NEW@:
+Changes in 1.2:
   o API Chages
     * Added __slots__ to all node instances so that consumers of rpath_xmllib
       can have nodes without instance dictionaries. This should greatly improve
