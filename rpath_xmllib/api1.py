@@ -19,6 +19,7 @@ character are public interfaces.
 """
 
 import os
+import sys
 import StringIO
 from xml import sax
 
@@ -344,6 +345,12 @@ class _AbstractNode(SerializableObject):
         # Now walk all attributes and qualify them with the namespace if
         # necessary
         for (nsName, attrName), attrVal in nonNsAttr:
+            if nsName == 'xml' and nsName not in self._nsMap:
+                # Bare xml: with no xmlns:xml specification
+                # Reading http://www.w3.org/TR/xmlbase/#syntax
+                # we'll assume that an undefined xml namespace prefix is
+                # bound to DataBinder.xmlBaseNamespace
+                self._nsMap[nsName] = self._nsAttributes[nsName] = DataBinder.xmlBaseNamespace
             if nsName is not None and nsName not in self._nsMap:
                 raise UndefinedNamespaceError(nsName)
             self._otherAttributes[(nsName, attrName)] = attrVal
@@ -855,6 +862,7 @@ class DataBinder(object):
 
     """
     xmlSchemaNamespace = 'http://www.w3.org/2001/XMLSchema-instance'
+    xmlBaseNamespace = 'http://www.w3.org/XML/1998/namespace'
     BindingHandlerFactory = BindingHandler
 
     def __init__(self, typeDict = None):
@@ -1035,7 +1043,8 @@ class DataBinder(object):
         try:
             parser.parse(stream)
         except sax.SAXParseException:
-            raise InvalidXML
+            exc_info = sys.exc_info()
+            raise InvalidXML, exc_info[1], exc_info[2]
         rootNode = self.contentHandler.rootNode
         self.contentHandler.rootNode = None
         return rootNode
