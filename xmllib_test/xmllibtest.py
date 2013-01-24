@@ -1,4 +1,3 @@
-#!/usr/bin/python
 #
 # Copyright (c) SAS Institute Inc.
 #
@@ -28,9 +27,9 @@ import rpath_xmllib as xmllib
 # This is an unused import, but it should make the test suite depend on api1
 from rpath_xmllib import api1 as xmllib1  # pyflakes=ignore
 
-import testsuite
+from testrunner import testhelp
 
-class BaseTest(testsuite.TestCase):
+class BaseTest(testhelp.TestCase):
     pass
 
 class DataBindingNodeTest(BaseTest):
@@ -1009,6 +1008,3 @@ schemaError2 = (
     "Element '{http://my.example.com}c2': This element is not expected. "
     "Expected is ( {http://my.example.com}c1 )."
 )
-
-if __name__ == "__main__":
-    testsuite.main()
