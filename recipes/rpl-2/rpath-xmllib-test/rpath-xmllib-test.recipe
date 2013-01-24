@@ -29,3 +29,5 @@ class rPathXmlLibTest(TestPackageRecipe):
 
     def setupSource(r):
         r.addMercurialSnapshot()
+        # Force use of installed library
+        r.Remove('rpath_xmllib', recursive=True)
