@@ -10,3 +10,6 @@ rpath_xmllib/xmllib_constants.pyc?$
 ^pylint/reports/
 ^rpath-common-.*.tar.bz2
 NEWS.html
+\.coverage
+\.failed
+\.times
