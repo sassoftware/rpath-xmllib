@@ -19,10 +19,12 @@ character are public interfaces.
 """
 
 import os
+import sys
 import StringIO
 from xml import sax
 
 from lxml import etree
+import collections
 
 #{ Exception classes
 class XmlLibError(Exception):
@@ -49,6 +51,8 @@ class SerializableObject(object):
     """
     Base class for an XML-serializable object
     """
+
+    __slots__ = ()
 
     # pylint: disable-msg=R0903
     # Too few public methods (1/2): this is an interface
@@ -110,12 +114,12 @@ class SerializableObject(object):
 
 class _AbstractNode(SerializableObject):
     """Abstract node class for parsing XML data"""
-    __slots__ = ['_children', '_nsMap', '_name', '_nsAttributes',
-                 '_otherAttributes', ]
-    _name = (None, None)
+    __slots__ = ('_children', '_nsMap', '_name', '_nsAttributes',
+                 '_otherAttributes', )
 
     def __init__(self, attributes = None, nsMap = None, name = None):
         SerializableObject.__init__(self)
+        self._name = (None, name)
         self._children = []
         self._nsMap = nsMap or {}
         self._nsAttributes = {}
@@ -341,6 +345,12 @@ class _AbstractNode(SerializableObject):
         # Now walk all attributes and qualify them with the namespace if
         # necessary
         for (nsName, attrName), attrVal in nonNsAttr:
+            if nsName == 'xml' and nsName not in self._nsMap:
+                # Bare xml: with no xmlns:xml specification
+                # Reading http://www.w3.org/TR/xmlbase/#syntax
+                # we'll assume that an undefined xml namespace prefix is
+                # bound to DataBinder.xmlBaseNamespace
+                self._nsMap[nsName] = self._nsAttributes[nsName] = DataBinder.xmlBaseNamespace
             if nsName is not None and nsName not in self._nsMap:
                 raise UndefinedNamespaceError(nsName)
             self._otherAttributes[(nsName, attrName)] = attrVal
@@ -354,6 +364,8 @@ class _AbstractNode(SerializableObject):
 
 class BaseNode(_AbstractNode):
     """Base node for parsing XML data"""
+
+    __slots__ = ()
 #}
 
 #{ Specialized nodes
@@ -371,8 +383,7 @@ class GenericNode(BaseNode):
     attribute in _singleChildren will cause the value to be stored directly.
     """
 
-    def __init__(self, attributes = None, nsMap = None):
-        BaseNode.__init__(self, attributes = attributes, nsMap = nsMap)
+    __slots__ = ()
 
 class IntegerNode(BaseNode):
     """
@@ -382,7 +393,12 @@ class IntegerNode(BaseNode):
     an integer when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to 0.
     """
-    _name = (None, 'int')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'int')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Convert the character data to an integer"
@@ -405,7 +421,12 @@ class StringNode(BaseNode):
     a string when finalize is called. All attributes and tags will be lost.
     If no text is set, this object will default to ''.
     """
-    _name = (None, 'string')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'string')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Convert the text data to a string"
@@ -425,7 +446,12 @@ class NullNode(BaseNode):
     None when finalize is called. All attributes and tags will be lost.
     All text will be lost.
     """
-    _name = (None, 'none')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'none')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Discard the character data"
@@ -443,7 +469,12 @@ class BooleanNode(BaseNode):
     a bool when finalize is called. All attributes and tags will be lost.
     '1' or 'true' (case insensitive) will result in True.
     """
-    _name = (None, 'bool')
+
+    __slots__ = ()
+
+    def __init__(self, *args, **kwargs):
+        kwargs.setdefault('name', 'bool')
+        BaseNode.__init__(self, *args, **kwargs)
 
     def finalize(self):
         "Convert the character data to a boolean value"
@@ -727,8 +758,15 @@ class BindingHandler(sax.ContentHandler):
 
     def endElement(self, name):
         "SAX parser callback invoked when an end element event is emitted"
+        elem = self._handleEndElement(name)
+        self._processEndElement(elem)
+
+    def _handleEndElement(self, name):
         elem = self.stack.pop()
-        assert(elem.getName() == name)
+        assert elem.getName() == name
+        return elem
+
+    def _processEndElement(self, elem):
         if not self.stack:
             self.rootNode = elem.finalize()
         else:
@@ -739,6 +777,26 @@ class BindingHandler(sax.ContentHandler):
         elem = self.stack[-1]
         elem.characters(ch)
 
+class StreamingBindingHandler(BindingHandler):
+    def __init__(self, typeDict=None):
+        BindingHandler.__init__(self, typeDict=typeDict)
+        self.generatedNodes = collections.deque()
+
+    def endElement(self, name):
+        "SAX parser callback invoked when an end element event is emitted"
+        elem = self._handleEndElement(name)
+        if getattr(elem, "WillYield", None):
+            self.generatedNodes.append(elem.finalize())
+            return
+        self._processEndElement(elem)
+
+    def next(self):
+        if not self.generatedNodes:
+            return None
+        return self.generatedNodes.popleft()
+
+    def clear(self):
+        return self.generatedNodes.clear()
 
 class DataBinder(object):
     """
@@ -804,6 +862,8 @@ class DataBinder(object):
 
     """
     xmlSchemaNamespace = 'http://www.w3.org/2001/XMLSchema-instance'
+    xmlBaseNamespace = 'http://www.w3.org/XML/1998/namespace'
+    BindingHandlerFactory = BindingHandler
 
     def __init__(self, typeDict = None):
         """
@@ -812,7 +872,7 @@ class DataBinder(object):
         @param typeDict: optional type mapping object
         @type typeDict: dict
         """
-        self.contentHandler = BindingHandler(typeDict)
+        self.contentHandler = self.BindingHandlerFactory(typeDict)
 
     def registerType(self, klass, name = None, namespace = None):
         """
@@ -873,18 +933,9 @@ class DataBinder(object):
                 self.validate(stream, schemaDir = schemaDir)
             stream.seek(0)
 
-            self.contentHandler.rootNode = None
-            parser = sax.make_parser()
-            parser.setContentHandler(self.contentHandler)
-            try:
-                parser.parse(stream)
-            except sax.SAXParseException, e:
-                raise InvalidXML
-            rootNode = self.contentHandler.rootNode
-            self.contentHandler.rootNode = None
+            return self._parse(stream)
         finally:
             stream.seek(origPos)
-        return rootNode
 
     @classmethod
     def getSchemaLocationsFromStream(cls, stream):
@@ -984,6 +1035,49 @@ class DataBinder(object):
         res = etree.tostring(tree, pretty_print = prettyPrint,
             xml_declaration = True, encoding = 'UTF-8')
         return res
+
+    def _parse(self, stream):
+        self.contentHandler.rootNode = None
+        parser = sax.make_parser()
+        parser.setContentHandler(self.contentHandler)
+        try:
+            parser.parse(stream)
+        except sax.SAXParseException:
+            exc_info = sys.exc_info()
+            raise InvalidXML, exc_info[1], exc_info[2]
+        rootNode = self.contentHandler.rootNode
+        self.contentHandler.rootNode = None
+        return rootNode
+
+class StreamingDataBinder(DataBinder):
+    BindingHandlerFactory = StreamingBindingHandler
+
+    class _Iterator(object):
+        BUFFER_SIZE = 16 * 1024
+        def __init__(self, parser, stream):
+            self.parser = parser
+            self.stream = stream
+            self.contentHandler = self.parser.getContentHandler()
+            self.contentHandler.clear()
+
+        def __iter__(self):
+            return self
+
+        def next(self):
+            node = self.contentHandler.next()
+            if node is not None:
+                return node
+            buf = self.stream.read(self.BUFFER_SIZE)
+            if not buf:
+                self.parser.close()
+                raise StopIteration()
+            self.parser.feed(buf)
+            return self.next()
+
+    def _parse(self, stream):
+        parser = sax.make_parser()
+        parser.setContentHandler(self.contentHandler)
+        return self._Iterator(parser, stream)
 #}
 
 def splitNamespace(tag):

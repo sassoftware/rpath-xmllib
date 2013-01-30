@@ -7,9 +7,9 @@ only to published stable releases; it is not in force for alpha
 and beta releases, including 0.x releases and any automated builds.
 
 To use the latest version of the interface:
-    from rpath_common import xmllib
+    import rpath_xmllib
 To use a specific API version of the interface:
-    from rpath_common.xmllib import api1 as xmllib
+    from rpath_xmllib import api1 as xmllib
 
 API documentation is available at http://cvs.rpath.com/rpath-xmllib-docs/
 or by running "make html" and viewing docs/developer/index.html (requires

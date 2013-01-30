@@ -12,7 +12,7 @@
 # full details.
 #
 
-VERSION=1.0
+VERSION=1.2
 # VERSION can be overridden by snapshot builds to force incompatible versions
 
 export prefix = /usr
@@ -24,7 +24,7 @@ export libexecdir = $(prefix)/libexec
 export datadir = $(prefix)/share
 export mandir = $(datadir)/man
 export sitedir = $(libdir)/python$(PYVERSION)/site-packages/
-export pydir = $(sitedir)/rpath_common/
+export pydir = $(sitedir)/rpath_xmllib
 export initdir = /etc/init.d
 export sysconfdir = /etc/sysconfig
 export docdir = $(datadir)/doc/product-common-$(VERSION)

@@ -19,7 +19,7 @@ all: default-subdirs default-all
 export TOPDIR = $(shell pwd)
 export DISTDIR = $(TOPDIR)/rpath-xmllib-$(VERSION)
 
-SUBDIRS=rpath_common
+SUBDIRS=rpath_xmllib
 
 dist_files = $(extra_files)
 
