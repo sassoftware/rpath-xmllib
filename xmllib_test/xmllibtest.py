@@ -97,7 +97,7 @@ class DataBindingNodeTest(BaseTest):
         # lxml will notice the re-definition of a namespace
         binder = xmllib.DataBinder()
         self.assertXMLEquals(binder.toXml(node, prettyPrint = False),
-            '<root xmlns="a" xmlns:nsB="b" nsB:attr="val3" attr="val1"/>')
+            '<root xmlns="a" xmlns:nsB="b" xmlns:nsC="b" nsB:attr="val3" attr="val1"/>')
 
     def testSlotBased(self):
         class S(xmllib.SlotBasedSerializableObject):
