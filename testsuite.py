@@ -1,3 +1,4 @@
+#!/usr/bin/python
 #
 # Copyright (c) SAS Institute Inc.
 #
@@ -15,20 +16,21 @@
 #
 
 
-dist_files = init_pylint.py  Makefile  pylintrc  run_pylint
+import sys
 
-all: pylint
-install:
+from testrunner import suite
 
-dist: default-dist
+class Suite(suite.TestSuite):
+    testsuite_module = sys.modules[__name__]
 
-pylint:
-	@echo running pylint...
-	@./run_pylint
-	@echo Done.  Error output is in the reports/ directory.
+    def getCoverageDirs(self, *args):
+        import rpath_xmllib
+        return [rpath_xmllib]
 
-clean:
-	rm -rf reports *,cover
 
-include ../Make.rules
-include ../Make.defs
+_s = Suite()
+setup = _s.setup
+main = _s.main
+
+if __name__ == '__main__':
+    _s.run()

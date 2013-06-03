@@ -15,20 +15,18 @@
 #
 
 
-dist_files = init_pylint.py  Makefile  pylintrc  run_pylint
+loadSuperClass('testpackage')
+class rPathXmlLibTest(TestPackageRecipe):
+    name = 'rpath-xmllib-test'
+    version = ''
 
-all: pylint
-install:
+    Flags.coverage = True
 
-dist: default-dist
+    buildRequires = [
+        'rpath-xmllib:python',
+    ]
 
-pylint:
-	@echo running pylint...
-	@./run_pylint
-	@echo Done.  Error output is in the reports/ directory.
-
-clean:
-	rm -rf reports *,cover
-
-include ../Make.rules
-include ../Make.defs
+    def setupSource(r):
+        r.addMercurialSnapshot()
+        # Force use of installed library
+        r.Remove('rpath_xmllib', recursive=True)
